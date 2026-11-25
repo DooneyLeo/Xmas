@@ -132,12 +132,12 @@
     const DEPARTMENTS = ['業務部', '工程部', '行銷部', '人資部', '產品部', '客服部'];
     const LIGHT_COLORS = ['#ff2a2a', '#ffb82a', '#2a82ff', '#2aff82', '#ff2ae1', '#b82aff', '#2affff'];
     const GOAL = 50;
-
-    // Triangle vertices for the 3 layers of the tree to calculate accurate light placement
+    // Triangle vertices for the 3 layers of the tree in the full-screen background image
+    // Positioned around the central Christmas tree crown so lights land on the branches
     const TREE_LAYERS = [
-      { A: { x: 50, y: 15 }, B: { x: 35, y: 45 }, C: { x: 65, y: 45 }, weight: 1 },
-      { A: { x: 50, y: 30 }, B: { x: 25, y: 65 }, C: { x: 75, y: 65 }, weight: 2 },
-      { A: { x: 50, y: 50 }, B: { x: 15, y: 90 }, C: { x: 85, y: 90 }, weight: 3 }
+      { A: { x: 50, y: 24 }, B: { x: 43, y: 44 }, C: { x: 57, y: 44 }, weight: 1 },
+      { A: { x: 50, y: 36 }, B: { x: 38, y: 60 }, C: { x: 62, y: 60 }, weight: 2 },
+      { A: { x: 50, y: 50 }, B: { x: 34, y: 78 }, C: { x: 66, y: 78 }, weight: 3 }
     ];
 
     // --- Helper Functions ---
@@ -240,15 +240,15 @@
         >
           {/* Background Image & Atmospheric Overlay */}
           <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-            {/* Background Christmas Tree Image (place in same folder as index.html on GitHub) */}
+            {/* Full-bleed background Christmas tree image replacing the vector tree */}
             <div
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105"
+              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
               style={{
                 backgroundImage: "url('./Gemini_Generated_Image_w7um5yw7um5yw7um.jfif')"
               }}
             />
-            {/* Dark atmospheric gradient overlay for text contrast */}
-            <div className="absolute inset-0 bg-[#070b14]/65 bg-[radial-gradient(ellipse_at_top,_rgba(15,23,42,0.55),_rgba(7,11,20,0.78)_65%,_rgba(2,6,23,0.92))]" />
+            {/* Subtle vignette so the background tree remains clear while floating UI stays legible */}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(7,11,20,0.12)_25%,_rgba(7,11,20,0.55)_75%,_rgba(2,6,23,0.78)_100%)]" />
             
             {/* Snowfall particles */}
             {snowflakes.map((flake) => (
@@ -268,179 +268,141 @@
             ))}
           </div>
 
-          {/* Main Container */}
-          <div className="relative z-10 w-full max-w-7xl mx-auto px-4 py-6 lg:py-8 lg:h-screen flex flex-col">
+          {/* Full-screen Interactive Gratitude Lights over the Background Tree */}
+          <div className="fixed inset-0 z-10 pointer-events-none">
+            {messages.map((msg) => {
+              const isHovered = hoveredMsgId === msg.id;
+              const isFilteredOut = !filteredMessages.some(m => m.id === msg.id);
+
+              return (
+                <div
+                  key={`tree-light-${msg.id}`}
+                  className="absolute pointer-events-auto cursor-pointer transition-all duration-300 p-2 -m-2"
+                  style={{
+                    left: `${msg.x}%`,
+                    top: `${msg.y}%`,
+                    transform: `translate(-50%, -50%) ${isHovered ? 'scale(1.45)' : 'scale(1)'}`,
+                    zIndex: isHovered ? 40 : 20,
+                    opacity: isFilteredOut ? 0.15 : 1,
+                  }}
+                  onMouseEnter={() => setHoveredMsgId(msg.id)}
+                  onMouseLeave={() => setHoveredMsgId(null)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setHoveredMsgId(isHovered ? null : msg.id);
+                  }}
+                >
+                  <div
+                    className="w-3 h-3 md:w-3.5 md:h-3.5 rounded-full relative"
+                    style={{
+                      backgroundColor: msg.color,
+                      boxShadow: `0 0 10px ${msg.color}, 0 0 22px ${msg.color}`,
+                      animation: isHovered || isFilteredOut ? 'none' : 'twinkle 2s ease-in-out infinite',
+                      animationDelay: msg.delay,
+                    }}
+                  >
+                    <div className="absolute inset-0 bg-white/60 rounded-full w-1/2 h-1/2 m-auto" />
+                  </div>
+
+                  {/* Light Hover/Tap Tooltip */}
+                  <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-56 sm:w-64 glass-panel bg-slate-900/95 p-3.5 rounded-2xl pointer-events-none transition-all duration-200 origin-bottom z-50 ${isHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}>
+                    <div className="flex justify-between items-center gap-2 mb-1.5 border-b border-white/10 pb-1.5">
+                      <span className="font-semibold text-sm text-emerald-300 truncate">To: {msg.recipient}</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-slate-200 border border-white/10 flex-shrink-0">
+                        {msg.department}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-100 leading-relaxed mb-2 line-clamp-3">
+                      "{msg.message}"
+                    </p>
+                    <div className="text-[11px] text-slate-400 text-right font-medium truncate">
+                      From: {msg.sender}
+                    </div>
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-slate-800" />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Main Overlay Container: Leaves center tree view clear, places progress at bottom-left and search/cards at right */}
+          <div className="relative z-20 w-full max-w-[1440px] mx-auto px-4 py-5 lg:py-6 lg:h-screen flex flex-col justify-between pointer-events-none">
             
-            {/* Header Section */}
-            <header className="mb-6 flex-shrink-0 text-center flex flex-col items-center">
-              <div className="inline-flex items-center justify-center px-5 py-3 glass-panel rounded-2xl mb-3 shadow-emerald-900/20 shadow-2xl">
-                <IconGift className="text-emerald-400 mr-3 flex-shrink-0" size={28} />
-                <h1 className="text-2xl md:text-4xl font-extrabold bg-gradient-to-br from-white via-emerald-100 to-teal-400 bg-clip-text text-transparent">
+            {/* Top-Left Compact Header */}
+            <header className="flex-shrink-0 flex flex-col items-start pointer-events-auto max-w-md">
+              <div className="inline-flex items-center justify-center px-4 py-2.5 glass-panel rounded-2xl mb-2 shadow-emerald-900/20 shadow-xl">
+                <IconGift className="text-emerald-400 mr-2.5 flex-shrink-0" size={22} />
+                <h1 className="text-xl md:text-2xl font-extrabold bg-gradient-to-br from-white via-emerald-100 to-teal-400 bg-clip-text text-transparent">
                   Company Gratitude Tree
                 </h1>
               </div>
-              <p className="text-slate-300 text-sm md:text-base max-w-2xl font-light drop-shadow">
-                感謝有你，點亮聖誕。每一則留言都將化作樹上的一盞溫暖燈光。
+              <p className="text-slate-200/90 text-xs md:text-sm font-light drop-shadow bg-slate-950/35 backdrop-blur-sm px-3 py-1 rounded-xl">
+                點擊樹上的燈光或瀏覽右側感謝卡，一起點亮聖誕祝福。
               </p>
             </header>
 
-            {/* 2-Column Responsive Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 flex-grow lg:min-h-0 pb-4">
+            {/* Middle & Bottom Overlay Area */}
+            <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-5 flex-grow lg:min-h-0 mt-4 lg:mt-0">
               
-              {/* Left Column: Progress & Interactive Christmas Tree */}
-              <div className="lg:col-span-5 flex flex-col gap-5 h-[560px] sm:h-[620px] lg:h-full">
-                
-                {/* Progress Panel */}
-                <div className="glass-panel rounded-3xl p-5 relative overflow-hidden group flex-shrink-0">
-                  <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                    <IconStar size={60} />
-                  </div>
-                  <h3 className="text-base font-semibold flex items-center gap-2 mb-3 text-slate-100">
-                    <IconSparkles size={18} className="text-yellow-400" />
-                    點燈進度 (Gratitude Goal)
-                  </h3>
-                  <div className="flex justify-between items-end mb-2">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
-                        {messages.length}
-                      </span>
-                      <span className="text-xs text-emerald-300/80 font-medium">盞已點亮</span>
-                    </div>
-                    <span className="text-slate-300 text-xs font-medium">目標: {GOAL} 盞燈 ({progress}%)</span>
-                  </div>
-                  <div className="h-2.5 w-full bg-slate-900/80 rounded-full overflow-hidden border border-white/10">
-                    <div
-                      className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-yellow-400 relative transition-all duration-1000 ease-out rounded-full"
-                      style={{ width: `${progress}%` }}
-                    >
-                      <div className="absolute inset-0 bg-white/30" style={{ animation: 'twinkle 2s infinite' }} />
-                    </div>
-                  </div>
+              {/* Bottom-Left: Compact Gratitude Goal Progress Bar so the center tree stays open */}
+              <div className="w-full lg:w-[340px] xl:w-[370px] glass-panel rounded-3xl p-4 md:p-5 relative overflow-hidden group flex-shrink-0 pointer-events-auto order-2 lg:order-1">
+                <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <IconStar size={48} />
                 </div>
-
-                {/* Interactive Christmas Tree */}
-                <div className="flex-grow relative flex items-center justify-center glass-panel rounded-3xl p-6 overflow-hidden">
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3/4 h-3/4 bg-emerald-500/15 blur-[80px] rounded-full pointer-events-none" />
-                  
-                  <div className="relative w-full max-w-[300px] sm:max-w-[320px] aspect-[4/5] drop-shadow-[0_20px_30px_rgba(0,0,0,0.6)]" style={{ animation: 'float 8s ease-in-out infinite' }}>
-                    {/* Vector Christmas Tree */}
-                    <svg viewBox="0 0 100 100" className="w-full h-full" overflow="visible">
-                      {/* Tree Trunk */}
-                      <path d="M 43 85 L 57 85 L 55 98 L 45 98 Z" fill="#3E2723" />
-                      <path d="M 43 85 L 50 85 L 49 98 L 45 98 Z" fill="#2D1C15" />
-
-                      {/* Layer 3 (Bottom) */}
-                      <path d="M 50 50 C 40 50, 20 85, 15 90 C 25 94, 75 94, 85 90 C 80 85, 60 50, 50 50 Z" fill="#0A3B22" />
-                      <path d="M 50 50 L 50 93 C 75 93, 85 90, 85 90 C 80 85, 60 50, 50 50 Z" fill="#062917" />
-                      
-                      {/* Layer 2 (Middle) */}
-                      <path d="M 50 30 C 42 30, 28 60, 25 65 C 35 68, 65 68, 75 65 C 72 60, 58 30, 50 30 Z" fill="#0D5430" />
-                      <path d="M 50 30 L 50 67 C 65 67, 75 65, 75 65 C 72 60, 58 30, 50 30 Z" fill="#0A3F23" />
-                      
-                      {/* Layer 1 (Top) */}
-                      <path d="M 50 15 C 45 15, 37 42, 35 45 C 42 47, 58 47, 65 45 C 63 42, 55 15, 50 15 Z" fill="#117541" />
-                      <path d="M 50 15 L 50 46 C 58 46, 65 45, 65 45 C 63 42, 55 15, 50 15 Z" fill="#0C572F" />
-
-                      {/* Decorative Garland */}
-                      <path d="M 35 45 Q 50 55 70 50" fill="none" stroke="#FFD700" strokeWidth="0.6" strokeDasharray="1, 1" opacity="0.65" />
-                      <path d="M 25 65 Q 50 78 80 70" fill="none" stroke="#FFD700" strokeWidth="0.6" strokeDasharray="1, 1" opacity="0.65" />
-
-                      {/* Top Glowing Star */}
-                      <g style={{ transformOrigin: '50px 10px', animation: 'twinkle 3s ease-in-out infinite' }}>
-                        <path d="M 50 2 L 52 9 L 59 9 L 53 14 L 55 21 L 50 17 L 45 21 L 47 14 L 41 9 L 48 9 Z" fill="#FDE047" />
-                        <circle cx="50" cy="12" r="8" fill="#FDE047" filter="blur(6px)" opacity="0.55" />
-                      </g>
-                    </svg>
-
-                    {/* Dynamic Lights */}
-                    {messages.map((msg) => {
-                      const isHovered = hoveredMsgId === msg.id;
-                      const isFilteredOut = !filteredMessages.some(m => m.id === msg.id);
-                      
-                      return (
-                        <div
-                          key={msg.id}
-                          className="absolute cursor-pointer transition-all duration-300 p-2 -m-2"
-                          style={{
-                            left: `${msg.x}%`,
-                            top: `${msg.y}%`,
-                            transform: `translate(-50%, -50%) ${isHovered ? 'scale(1.45)' : 'scale(1)'}`,
-                            zIndex: isHovered ? 40 : 20,
-                            opacity: isFilteredOut ? 0.12 : 1,
-                          }}
-                          onMouseEnter={() => setHoveredMsgId(msg.id)}
-                          onMouseLeave={() => setHoveredMsgId(null)}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setHoveredMsgId(isHovered ? null : msg.id);
-                          }}
-                        >
-                          <div
-                            className="w-3 h-3 md:w-3.5 md:h-3.5 rounded-full relative"
-                            style={{
-                              backgroundColor: msg.color,
-                              boxShadow: `0 0 10px ${msg.color}, 0 0 20px ${msg.color}`,
-                              animation: isHovered || isFilteredOut ? 'none' : 'twinkle 2s ease-in-out infinite',
-                              animationDelay: msg.delay,
-                            }}
-                          >
-                            <div className="absolute inset-0 bg-white/50 rounded-full w-1/2 h-1/2 m-auto" />
-                          </div>
-
-                          {/* Light Hover/Tap Tooltip */}
-                          <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-56 sm:w-64 glass-panel bg-slate-900/90 p-3.5 rounded-2xl pointer-events-none transition-all duration-200 origin-bottom z-50 ${isHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}>
-                            <div className="flex justify-between items-center gap-2 mb-1.5 border-b border-white/10 pb-1.5">
-                              <span className="font-semibold text-sm text-emerald-300 truncate">To: {msg.recipient}</span>
-                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-slate-200 border border-white/10 flex-shrink-0">
-                                {msg.department}
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-100 leading-relaxed mb-2 line-clamp-3">
-                              "{msg.message}"
-                            </p>
-                            <div className="text-[11px] text-slate-400 text-right font-medium truncate">
-                              From: {msg.sender}
-                            </div>
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-slate-800" />
-                          </div>
-                        </div>
-                      );
-                    })}
+                <h3 className="text-sm font-semibold flex items-center gap-2 mb-2 text-slate-100">
+                  <IconSparkles size={16} className="text-yellow-400" />
+                  點燈進度 (Gratitude Goal)
+                </h3>
+                <div className="flex justify-between items-end mb-2">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
+                      {messages.length}
+                    </span>
+                    <span className="text-xs text-emerald-300/90 font-medium">盞已點亮</span>
+                  </div>
+                  <span className="text-slate-300 text-xs font-medium">目標: {GOAL} 盞燈 ({progress}%)</span>
+                </div>
+                <div className="h-2.5 w-full bg-slate-900/80 rounded-full overflow-hidden border border-white/10">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-yellow-400 relative transition-all duration-1000 ease-out rounded-full"
+                    style={{ width: `${progress}%` }}
+                  >
+                    <div className="absolute inset-0 bg-white/30" style={{ animation: 'twinkle 2s infinite' }} />
                   </div>
                 </div>
               </div>
 
-              {/* Right Column: Search, Department Filters & Scrollable Cards */}
-              <div className="lg:col-span-7 flex flex-col h-[680px] lg:h-full">
+              {/* Right Floating Drawer: Search, Department Filters & Scrollable Gratitude Cards */}
+              <aside className="w-full lg:w-[460px] xl:w-[520px] flex flex-col h-[560px] lg:h-full max-h-[82vh] pointer-events-auto order-1 lg:order-2">
                 
                 {/* Search & Filters Controls */}
-                <div className="glass-panel rounded-3xl p-5 md:p-6 mb-4 flex-shrink-0 space-y-4">
+                <div className="glass-panel rounded-3xl p-4 md:p-5 mb-3 flex-shrink-0 space-y-3">
                   <div className="relative">
-                    <IconSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                    <IconSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input
                       type="text"
                       placeholder="搜尋收件人、寄件人、部門或感謝內容..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full glass-input rounded-xl pl-12 pr-10 py-3 transition-all text-sm placeholder:text-slate-400"
+                      className="w-full glass-input rounded-xl pl-11 pr-10 py-2.5 transition-all text-sm placeholder:text-slate-400"
                     />
                     {searchQuery && (
                       <button
                         type="button"
                         onClick={() => setSearchQuery('')}
                         aria-label="清除搜尋"
-                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
                       >
-                        <IconX size={16} />
+                        <IconX size={15} />
                       </button>
                     )}
                   </div>
                   
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => setActiveDept('All')}
-                      className={`px-4 py-2 rounded-full text-xs md:text-sm font-medium transition-all ${
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                         activeDept === 'All'
                           ? 'bg-white text-slate-900 shadow-[0_0_15px_rgba(255,255,255,0.4)]'
                           : 'bg-white/5 hover:bg-white/15 text-slate-200 border border-white/10'
@@ -455,7 +417,7 @@
                           key={dept}
                           type="button"
                           onClick={() => setActiveDept(dept)}
-                          className={`px-4 py-2 rounded-full text-xs md:text-sm font-medium transition-all ${
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                             activeDept === dept
                               ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] border border-emerald-400'
                               : 'bg-white/5 hover:bg-white/15 text-slate-200 border border-white/10'
@@ -469,19 +431,19 @@
                 </div>
 
                 {/* Scrollable Message List */}
-                <div className="flex-grow overflow-y-auto custom-scrollbar pr-1 md:pr-2 pb-6">
+                <div className="flex-grow overflow-y-auto custom-scrollbar pr-1 pb-2">
                   {filteredMessages.length === 0 ? (
-                    <div className="glass-panel rounded-3xl p-12 text-center flex flex-col items-center justify-center mt-2">
-                      <IconMessageSquare size={48} className="text-slate-500 mb-4" />
-                      <p className="text-lg text-slate-200 font-medium">找不到符合條件的感謝留言</p>
-                      <p className="text-sm text-slate-400 mt-2">請嘗試更換搜尋關鍵字或切換其他部門分類</p>
+                    <div className="glass-panel rounded-3xl p-10 text-center flex flex-col items-center justify-center">
+                      <IconMessageSquare size={42} className="text-slate-400 mb-3" />
+                      <p className="text-base text-slate-100 font-medium">找不到符合條件的感謝留言</p>
+                      <p className="text-xs text-slate-400 mt-1.5">請嘗試更換搜尋關鍵字或切換其他部門分類</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3">
                       {filteredMessages.map((msg, idx) => (
                         <div
                           key={msg.id}
-                          className="glass-panel p-5 rounded-2xl transition-all duration-300 hover:-translate-y-1 hover:border-emerald-400/40 hover:shadow-[0_8px_25px_rgba(16,185,129,0.12)] animate-pop-in flex flex-col cursor-pointer"
+                          className="glass-panel p-4 rounded-2xl transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-400/40 hover:shadow-[0_8px_25px_rgba(16,185,129,0.12)] animate-pop-in flex flex-col cursor-pointer"
                           style={{ animationDelay: `${(idx % 10) * 0.04}s` }}
                           onMouseEnter={() => setHoveredMsgId(msg.id)}
                           onMouseLeave={() => setHoveredMsgId(null)}
@@ -490,28 +452,28 @@
                             setHoveredMsgId(hoveredMsgId === msg.id ? null : msg.id);
                           }}
                         >
-                          <div className="flex justify-between items-start mb-3 gap-2">
+                          <div className="flex justify-between items-start mb-2 gap-2">
                             <div>
-                              <div className="flex items-center gap-2 mb-1.5">
-                                <span className="px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-white/10 text-slate-200 border border-white/10">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-white/10 text-slate-200 border border-white/10">
                                   {msg.department}
                                 </span>
-                                <span className="text-xs text-slate-400">{msg.date}</span>
+                                <span className="text-[11px] text-slate-400">{msg.date}</span>
                               </div>
-                              <h4 className="font-semibold text-slate-100 text-sm">
+                              <h4 className="font-semibold text-slate-100 text-xs sm:text-sm">
                                 To: <span className="text-emerald-400">{msg.recipient}</span>
                               </h4>
-                              <h5 className="text-xs text-slate-400 mt-0.5">
+                              <h5 className="text-[11px] text-slate-400 mt-0.5">
                                 From: {msg.sender}
                               </h5>
                             </div>
                             {/* Dot Indicator matching tree light */}
                             <div
-                              className="w-3.5 h-3.5 rounded-full flex-shrink-0 mt-1"
+                              className="w-3 h-3 rounded-full flex-shrink-0 mt-1"
                               style={{ backgroundColor: msg.color, boxShadow: `0 0 10px ${msg.color}` }}
                             />
                           </div>
-                          <p className="text-slate-200 text-sm leading-relaxed flex-grow">
+                          <p className="text-slate-200 text-xs sm:text-sm leading-relaxed flex-grow">
                             「{msg.message}」
                           </p>
                         </div>
@@ -520,7 +482,7 @@
                   )}
                 </div>
 
-              </div>
+              </aside>
             </div>
           </div>
         </div>
