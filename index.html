@@ -32,6 +32,9 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
+    html {
+      scroll-behavior: smooth;
+    }
     @keyframes twinkle {
       0%, 100% { opacity: 0.85; transform: scale(1); filter: brightness(1.1); }
       50% { opacity: 0.4; transform: scale(0.85); filter: brightness(0.75); }
@@ -52,11 +55,23 @@
     .animate-pop-in {
       animation: popIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
+    /* Responsive background framing: centers on the Christmas tree on portrait mobile & wide desktop */
+    .tree-bg-image {
+      background-image: url('./Gemini_Generated_Image_w7um5yw7um5yw7um.jfif');
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-position: 50% 42%;
+    }
+    @media (min-width: 1024px) {
+      .tree-bg-image {
+        background-position: 50% 50%;
+      }
+    }
     .glass-panel {
-      background: rgba(15, 23, 42, 0.48);
+      background: rgba(15, 23, 42, 0.52);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.12);
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
     }
     .glass-input {
@@ -80,7 +95,7 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useMemo } = React;
+    const { useState, useMemo, useEffect, useCallback } = React;
 
     // --- Inline SVG Icons (Zero external icon dependency issues) ---
     const IconGift = ({ size = 24, className = '' }) => (
@@ -132,8 +147,7 @@
     const DEPARTMENTS = ['業務部', '工程部', '行銷部', '人資部', '產品部', '客服部'];
     const LIGHT_COLORS = ['#ff2a2a', '#ffb82a', '#2a82ff', '#2aff82', '#ff2ae1', '#b82aff', '#2affff'];
     const GOAL = 50;
-    // Triangle vertices for the 3 layers of the tree in the full-screen background image
-    // Positioned around the central Christmas tree crown so lights land on the branches
+    // Normalized coordinates (0-100) within the source background image's Christmas tree crown
     const TREE_LAYERS = [
       { A: { x: 50, y: 24 }, B: { x: 43, y: 44 }, C: { x: 57, y: 44 }, weight: 1 },
       { A: { x: 50, y: 36 }, B: { x: 38, y: 60 }, C: { x: 62, y: 60 }, weight: 2 },
@@ -168,6 +182,36 @@
       return getRandomPointInTriangle(selectedLayer.A, selectedLayer.B, selectedLayer.C);
     }
 
+    // Maps normalized image coordinates onto the rendered cover background across portrait & landscape viewports
+    function mapImagePointToViewport(imgX, imgY, vpWidth, vpHeight, imgRatio, isDesktop) {
+      const vpRatio = vpWidth / Math.max(vpHeight, 1);
+      const focalX = 0.5;
+      const focalY = isDesktop ? 0.5 : 0.42;
+
+      let renderW, renderH, offsetX, offsetY;
+      if (vpRatio < imgRatio) {
+        // Portrait mobile/tablet: height fills viewport, width scales & centers on the tree
+        renderH = vpHeight;
+        renderW = vpHeight * imgRatio;
+        offsetX = (vpWidth - renderW) * focalX;
+        offsetY = 0;
+      } else {
+        // Landscape/desktop: width fills viewport, height scales proportionally
+        renderW = vpWidth;
+        renderH = vpWidth / imgRatio;
+        offsetX = 0;
+        offsetY = (vpHeight - renderH) * focalY;
+      }
+
+      const rawX = ((offsetX + (imgX / 100) * renderW) / vpWidth) * 100;
+      const rawY = ((offsetY + (imgY / 100) * renderH) / vpHeight) * 100;
+
+      return {
+        x: Math.min(Math.max(rawX, 8), 92),
+        y: Math.min(Math.max(rawY, 16), 86),
+      };
+    }
+
     // Mock Data (Traditional Chinese Workplace Gratitude Messages)
     const RAW_MESSAGES = [
       { id: 1, sender: '陳經理', recipient: '林小華', department: '業務部', message: '感謝小華這個月拚盡全力，幫公司拿下年底最大的一筆企業訂單，辛苦了！', date: '2024-12-20' },
@@ -200,6 +244,38 @@
       const [activeDept, setActiveDept] = useState('All');
       const [hoveredMsgId, setHoveredMsgId] = useState(null);
       const [searchQuery, setSearchQuery] = useState('');
+      const [imgRatio, setImgRatio] = useState(16 / 9);
+      const [viewport, setViewport] = useState(() => ({
+        width: typeof window !== 'undefined' ? window.innerWidth : 1280,
+        height: typeof window !== 'undefined' ? window.innerHeight : 800,
+      }));
+
+      // Detect background image natural aspect ratio and track viewport resize/orientation changes
+      useEffect(() => {
+        const img = new Image();
+        img.src = './Gemini_Generated_Image_w7um5yw7um5yw7um.jfif';
+        img.onload = () => {
+          if (img.naturalWidth && img.naturalHeight) {
+            setImgRatio(img.naturalWidth / img.naturalHeight);
+          }
+        };
+
+        const handleResize = () => {
+          setViewport({
+            width: window.innerWidth,
+            height: window.innerHeight,
+          });
+        };
+
+        window.addEventListener('resize', handleResize);
+        window.addEventListener('orientationchange', handleResize);
+        return () => {
+          window.removeEventListener('resize', handleResize);
+          window.removeEventListener('orientationchange', handleResize);
+        };
+      }, []);
+
+      const isDesktop = viewport.width >= 1024;
 
       // Pre-calculate snowflakes once so typing in search does not reset snow positions
       const snowflakes = useMemo(() => {
@@ -233,67 +309,76 @@
 
       const progress = Math.min(Math.round((messages.length / GOAL) * 100), 100);
 
+      const handleCardSelect = useCallback((msgId) => {
+        setHoveredMsgId((prev) => (prev === msgId ? null : msgId));
+        if (window.innerWidth < 1024) {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      }, []);
+
       return (
         <div 
-          className="min-h-screen bg-[#070b14] text-slate-100 font-sans overflow-x-hidden relative flex flex-col"
+          className="min-h-[100dvh] bg-[#070b14] text-slate-100 font-sans overflow-x-hidden relative flex flex-col"
           onClick={() => setHoveredMsgId(null)}
         >
-          {/* Background Image & Atmospheric Overlay */}
+          {/* Fixed Responsive Background Image & Atmospheric Overlay */}
           <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-            {/* Full-bleed background Christmas tree image replacing the vector tree */}
-            <div
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{
-                backgroundImage: "url('./Gemini_Generated_Image_w7um5yw7um5yw7um.jfif')"
-              }}
-            />
+            {/* Full-bleed responsive background focusing on the Christmas tree on portrait & landscape */}
+            <div className="absolute inset-0 tree-bg-image transition-all duration-500" />
             {/* Subtle vignette so the background tree remains clear while floating UI stays legible */}
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(7,11,20,0.12)_25%,_rgba(7,11,20,0.55)_75%,_rgba(2,6,23,0.78)_100%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,_rgba(7,11,20,0.08)_22%,_rgba(7,11,20,0.52)_72%,_rgba(2,6,23,0.82)_100%)] lg:bg-[radial-gradient(circle_at_center,_rgba(7,11,20,0.12)_25%,_rgba(7,11,20,0.55)_75%,_rgba(2,6,23,0.78)_100%)]" />
             
             {/* Snowfall particles */}
             {snowflakes.map((flake) => (
-              <div
-                key={`snow-${flake.id}`}
-                className="absolute rounded-full bg-white"
-                style={{
-                  width: flake.size,
-                  height: flake.size,
-                  left: flake.left,
-                  top: flake.top,
-                  opacity: flake.opacity,
-                  animation: `snowfall ${flake.duration} linear infinite`,
-                  animationDelay: flake.delay
-                }}
-              />
-            ))}
-          </div>
-
-          {/* Full-screen Interactive Gratitude Lights over the Background Tree */}
+          {/* Interactive Gratitude Lights locked onto the Background Tree across all screen ratios */}
           <div className="fixed inset-0 z-10 pointer-events-none">
             {messages.map((msg) => {
               const isHovered = hoveredMsgId === msg.id;
               const isFilteredOut = !filteredMessages.some(m => m.id === msg.id);
+              const pos = mapImagePointToViewport(
+                msg.x,
+                msg.y,
+                viewport.width,
+                viewport.height,
+                imgRatio,
+                isDesktop
+              );
+
+              // Keep tooltips inside narrow mobile screens without horizontal clipping
+              const tooltipAlignClass =
+                pos.x < 32
+                  ? 'left-0 translate-x-0'
+                  : pos.x > 68
+                  ? 'right-0 left-auto translate-x-0'
+                  : 'left-1/2 -translate-x-1/2';
+
+              const arrowAlignClass =
+                pos.x < 32
+                  ? 'left-4'
+                  : pos.x > 68
+                  ? 'right-4'
+                  : 'left-1/2 -translate-x-1/2';
 
               return (
                 <div
                   key={`tree-light-${msg.id}`}
-                  className="absolute pointer-events-auto cursor-pointer transition-all duration-300 p-2 -m-2"
+                  className="absolute pointer-events-auto cursor-pointer transition-all duration-300 p-2.5 -m-2.5 touch-manipulation"
                   style={{
-                    left: `${msg.x}%`,
-                    top: `${msg.y}%`,
+                    left: `${pos.x}%`,
+                    top: `${pos.y}%`,
                     transform: `translate(-50%, -50%) ${isHovered ? 'scale(1.45)' : 'scale(1)'}`,
                     zIndex: isHovered ? 40 : 20,
                     opacity: isFilteredOut ? 0.15 : 1,
                   }}
-                  onMouseEnter={() => setHoveredMsgId(msg.id)}
-                  onMouseLeave={() => setHoveredMsgId(null)}
+                  onMouseEnter={() => isDesktop && setHoveredMsgId(msg.id)}
+                  onMouseLeave={() => isDesktop && setHoveredMsgId(null)}
                   onClick={(e) => {
                     e.stopPropagation();
                     setHoveredMsgId(isHovered ? null : msg.id);
                   }}
                 >
                   <div
-                    className="w-3 h-3 md:w-3.5 md:h-3.5 rounded-full relative"
+                    className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full relative"
                     style={{
                       backgroundColor: msg.color,
                       boxShadow: `0 0 10px ${msg.color}, 0 0 22px ${msg.color}`,
@@ -305,7 +390,7 @@
                   </div>
 
                   {/* Light Hover/Tap Tooltip */}
-                  <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-56 sm:w-64 glass-panel bg-slate-900/95 p-3.5 rounded-2xl pointer-events-none transition-all duration-200 origin-bottom z-50 ${isHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}>
+                  <div className={`absolute bottom-full ${tooltipAlignClass} mb-3 w-56 sm:w-64 glass-panel bg-slate-900/95 p-3.5 rounded-2xl pointer-events-none transition-all duration-200 origin-bottom z-50 ${isHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}>
                     <div className="flex justify-between items-center gap-2 mb-1.5 border-b border-white/10 pb-1.5">
                       <span className="font-semibold text-sm text-emerald-300 truncate">To: {msg.recipient}</span>
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-slate-200 border border-white/10 flex-shrink-0">
@@ -318,34 +403,62 @@
                     <div className="text-[11px] text-slate-400 text-right font-medium truncate">
                       From: {msg.sender}
                     </div>
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-slate-800" />
+                    <div className={`absolute top-full ${arrowAlignClass} w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-slate-800`} />
                   </div>
                 </div>
               );
             })}
           </div>
 
-          {/* Main Overlay Container: Leaves center tree view clear, places progress at bottom-left and search/cards at right */}
-          <div className="relative z-20 w-full max-w-[1440px] mx-auto px-4 py-5 lg:py-6 lg:h-screen flex flex-col justify-between pointer-events-none">
+          {/* Main Responsive Container:
+              - Mobile/Tablet (< lg): Top hero stage showcases the unobstructed portrait Christmas tree, followed smoothly by Progress & Cards
+              - Desktop (>= lg): Full-height cockpit with left progress bar and right floating card drawer */}
+          <div className="relative z-20 w-full max-w-[1440px] mx-auto px-3.5 sm:px-6 py-4 sm:py-6 lg:h-screen flex flex-col justify-between pointer-events-none">
             
-            {/* Top-Left Compact Header */}
-            <header className="flex-shrink-0 flex flex-col items-start pointer-events-auto max-w-md">
-              <div className="inline-flex items-center justify-center px-4 py-2.5 glass-panel rounded-2xl mb-2 shadow-emerald-900/20 shadow-xl">
-                <IconGift className="text-emerald-400 mr-2.5 flex-shrink-0" size={22} />
-                <h1 className="text-xl md:text-2xl font-extrabold bg-gradient-to-br from-white via-emerald-100 to-teal-400 bg-clip-text text-transparent">
-                  Company Gratitude Tree
-                </h1>
-              </div>
-              <p className="text-slate-200/90 text-xs md:text-sm font-light drop-shadow bg-slate-950/35 backdrop-blur-sm px-3 py-1 rounded-xl">
-                點擊樹上的燈光或瀏覽右側感謝卡，一起點亮聖誕祝福。
-              </p>
-            </header>
+            {/* Mobile/Tablet Hero Tree Stage (keeps the center tree completely clear on portrait phones) */}
+            <div className="min-h-[68svh] sm:min-h-[72svh] lg:min-h-0 flex flex-col justify-between lg:contents">
+              {/* Top-Left Compact Header */}
+              <header className="flex-shrink-0 flex flex-col items-start pointer-events-auto max-w-md">
+                <div className="inline-flex items-center justify-center px-3.5 sm:px-4 py-2 sm:py-2.5 glass-panel rounded-2xl mb-2 shadow-emerald-900/20 shadow-xl">
+                  <IconGift className="text-emerald-400 mr-2 sm:mr-2.5 flex-shrink-0" size={20} />
+                  <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold bg-gradient-to-br from-white via-emerald-100 to-teal-400 bg-clip-text text-transparent">
+                    Company Gratitude Tree
+                  </h1>
+                </div>
+                <p className="text-slate-200/95 text-xs sm:text-sm font-light drop-shadow bg-slate-950/45 backdrop-blur-sm px-3 py-1.5 rounded-xl">
+                  點擊樹上的燈光或下方感謝卡，一起點亮聖誕祝福。
+                </p>
+              </header>
 
-            {/* Middle & Bottom Overlay Area */}
-            <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-5 flex-grow lg:min-h-0 mt-4 lg:mt-0">
+              {/* Progress Bar: Bottom of Hero Tree on Mobile/Tablet, Bottom-Left on Desktop */}
+              <div className="w-full lg:w-[340px] xl:w-[370px] glass-panel rounded-3xl p-4 md:p-5 relative overflow-hidden group flex-shrink-0 pointer-events-auto lg:hidden mt-auto">
+                <div className="flex justify-between items-center mb-1.5">
+                  <h3 className="text-xs sm:text-sm font-semibold flex items-center gap-1.5 text-slate-100">
+                    <IconSparkles size={15} className="text-yellow-400" />
+                    點燈進度 (Gratitude Goal)
+                  </h3>
+                  <span className="text-slate-300 text-xs font-medium">目標: {GOAL} 盞 ({progress}%)</span>
+                </div>
+                <div className="flex items-baseline gap-1.5 mb-2">
+                  <span className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
+                    {messages.length}
+                  </span>
+                  <span className="text-xs text-emerald-300/90 font-medium">盞已點亮</span>
+                </div>
+                <div className="h-2 w-full bg-slate-900/80 rounded-full overflow-hidden border border-white/10">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-yellow-400 relative transition-all duration-1000 ease-out rounded-full"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Desktop Bottom-Left & Responsive Cards Area */}
+            <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-5 flex-grow lg:min-h-0 mt-4 lg:mt-0 pb-6 lg:pb-0">
               
-              {/* Bottom-Left: Compact Gratitude Goal Progress Bar so the center tree stays open */}
-              <div className="w-full lg:w-[340px] xl:w-[370px] glass-panel rounded-3xl p-4 md:p-5 relative overflow-hidden group flex-shrink-0 pointer-events-auto order-2 lg:order-1">
+              {/* Desktop-only Bottom-Left Progress Card */}
+              <div className="hidden lg:block w-[340px] xl:w-[370px] glass-panel rounded-3xl p-5 relative overflow-hidden group flex-shrink-0 pointer-events-auto">
                 <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
                   <IconStar size={48} />
                 </div>
@@ -355,7 +468,7 @@
                 </h3>
                 <div className="flex justify-between items-end mb-2">
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
+                    <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
                       {messages.length}
                     </span>
                     <span className="text-xs text-emerald-300/90 font-medium">盞已點亮</span>
@@ -372,37 +485,37 @@
                 </div>
               </div>
 
-              {/* Right Floating Drawer: Search, Department Filters & Scrollable Gratitude Cards */}
-              <aside className="w-full lg:w-[460px] xl:w-[520px] flex flex-col h-[560px] lg:h-full max-h-[82vh] pointer-events-auto order-1 lg:order-2">
+              {/* Search, Department Filters & Gratitude Cards (Flows naturally below tree on Mobile/Tablet, Fixed Drawer on Desktop) */}
+              <aside className="w-full lg:w-[460px] xl:w-[520px] flex flex-col lg:h-full lg:max-h-[82vh] pointer-events-auto">
                 
                 {/* Search & Filters Controls */}
-                <div className="glass-panel rounded-3xl p-4 md:p-5 mb-3 flex-shrink-0 space-y-3">
+                <div className="glass-panel rounded-3xl p-4 sm:p-5 mb-3 flex-shrink-0 space-y-3">
                   <div className="relative">
-                    <IconSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <IconSearch className="absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input
                       type="text"
                       placeholder="搜尋收件人、寄件人、部門或感謝內容..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full glass-input rounded-xl pl-11 pr-10 py-2.5 transition-all text-sm placeholder:text-slate-400"
+                      className="w-full glass-input rounded-xl pl-10 sm:pl-11 pr-10 py-2.5 transition-all text-sm placeholder:text-slate-400"
                     />
                     {searchQuery && (
                       <button
                         type="button"
                         onClick={() => setSearchQuery('')}
                         aria-label="清除搜尋"
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors touch-manipulation"
                       >
-                        <IconX size={15} />
+                        <IconX size={16} />
                       </button>
                     )}
                   </div>
                   
-                  <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                     <button
                       type="button"
                       onClick={() => setActiveDept('All')}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                      className={`px-3 py-1.5 sm:py-2 rounded-full text-xs font-medium transition-all touch-manipulation ${
                         activeDept === 'All'
                           ? 'bg-white text-slate-900 shadow-[0_0_15px_rgba(255,255,255,0.4)]'
                           : 'bg-white/5 hover:bg-white/15 text-slate-200 border border-white/10'
@@ -417,7 +530,7 @@
                           key={dept}
                           type="button"
                           onClick={() => setActiveDept(dept)}
-                          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                          className={`px-3 py-1.5 sm:py-2 rounded-full text-xs font-medium transition-all touch-manipulation ${
                             activeDept === dept
                               ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] border border-emerald-400'
                               : 'bg-white/5 hover:bg-white/15 text-slate-200 border border-white/10'
@@ -430,8 +543,8 @@
                   </div>
                 </div>
 
-                {/* Scrollable Message List */}
-                <div className="flex-grow overflow-y-auto custom-scrollbar pr-1 pb-2">
+                {/* Message List: Natural page scroll on Mobile/Tablet, internal scroll on Desktop */}
+                <div className="lg:flex-grow lg:overflow-y-auto custom-scrollbar lg:pr-1 pb-2">
                   {filteredMessages.length === 0 ? (
                     <div className="glass-panel rounded-3xl p-10 text-center flex flex-col items-center justify-center">
                       <IconMessageSquare size={42} className="text-slate-400 mb-3" />
@@ -443,13 +556,13 @@
                       {filteredMessages.map((msg, idx) => (
                         <div
                           key={msg.id}
-                          className="glass-panel p-4 rounded-2xl transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-400/40 hover:shadow-[0_8px_25px_rgba(16,185,129,0.12)] animate-pop-in flex flex-col cursor-pointer"
+                          className="glass-panel p-4 rounded-2xl transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-400/40 hover:shadow-[0_8px_25px_rgba(16,185,129,0.12)] animate-pop-in flex flex-col cursor-pointer touch-manipulation"
                           style={{ animationDelay: `${(idx % 10) * 0.04}s` }}
-                          onMouseEnter={() => setHoveredMsgId(msg.id)}
-                          onMouseLeave={() => setHoveredMsgId(null)}
+                          onMouseEnter={() => isDesktop && setHoveredMsgId(msg.id)}
+                          onMouseLeave={() => isDesktop && setHoveredMsgId(null)}
                           onClick={(e) => {
                             e.stopPropagation();
-                            setHoveredMsgId(hoveredMsgId === msg.id ? null : msg.id);
+                            handleCardSelect(msg.id);
                           }}
                         >
                           <div className="flex justify-between items-start mb-2 gap-2">
