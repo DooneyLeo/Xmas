@@ -57,10 +57,12 @@
     }
     /* Responsive background framing: centers on the Christmas tree on portrait mobile & wide desktop */
     .tree-bg-image {
-      background-image: url('./Gemini_Generated_Image_w7um5yw7um5yw7um.jfif');
-      background-size: cover;
-      background-repeat: no-repeat;
-      background-position: 50% 42%;
+      background-image:
+        url('./Gemini_Generated_Image_w7um5yw7um5yw7um.jfif'),
+        radial-gradient(circle at 50% 42%, #13382e 0%, #0b192c 48%, #070b14 100%);
+      background-size: cover, cover;
+      background-repeat: no-repeat, no-repeat;
+      background-position: 50% 42%, center;
     }
     @media (min-width: 1024px) {
       .tree-bg-image {
@@ -330,6 +332,22 @@
             
             {/* Snowfall particles */}
             {snowflakes.map((flake) => (
+              <div
+                key={`snow-${flake.id}`}
+                className="absolute rounded-full bg-white"
+                style={{
+                  width: flake.size,
+                  height: flake.size,
+                  left: flake.left,
+                  top: flake.top,
+                  opacity: flake.opacity,
+                  animation: `snowfall ${flake.duration} linear infinite`,
+                  animationDelay: flake.delay,
+                }}
+              />
+            ))}
+          </div>
+
           {/* Interactive Gratitude Lights locked onto the Background Tree across all screen ratios */}
           <div className="fixed inset-0 z-10 pointer-events-none">
             {messages.map((msg) => {
