@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Company Gratitude Tree | 企業聖誕感謝樹</title>
   
-  <!-- Google Fonts: Inter & Noto Sans TC for crisp Traditional Chinese typography -->
+  <!-- Google Fonts: Inter & Noto Sans TC -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;600;700;900&display=swap" rel="stylesheet">
@@ -28,7 +28,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   
-  <!-- Babel Standalone for in-browser JSX compilation -->
+  <!-- Babel Standalone -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
@@ -38,10 +38,6 @@
     @keyframes twinkle {
       0%, 100% { opacity: 0.85; transform: scale(1); filter: brightness(1.1); }
       50% { opacity: 0.4; transform: scale(0.85); filter: brightness(0.75); }
-    }
-    @keyframes float {
-      0%, 100% { transform: translateY(0px); }
-      50% { transform: translateY(-8px); }
     }
     @keyframes snowfall {
       0% { transform: translateY(-10vh) translateX(0); opacity: 0; }
@@ -55,7 +51,6 @@
     .animate-pop-in {
       animation: popIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
-    /* Responsive background framing: centers on the Christmas tree on portrait mobile & wide desktop */
     .tree-bg-image {
       background-image:
         url('./Gemini_Generated_Image_w7um5yw7um5yw7um.jfif'),
@@ -70,7 +65,7 @@
       }
     }
     .glass-panel {
-      background: rgba(15, 23, 42, 0.52);
+      background: rgba(15, 23, 42, 0.54);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       border: 1px solid rgba(255, 255, 255, 0.12);
@@ -86,7 +81,6 @@
       border-color: rgba(52, 211, 153, 0.55);
       outline: none;
     }
-    /* Custom Scrollbar for message list */
     .custom-scrollbar::-webkit-scrollbar { width: 6px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 10px; }
@@ -99,7 +93,21 @@
   <script type="text/babel">
     const { useState, useMemo, useEffect, useCallback } = React;
 
-    // --- Inline SVG Icons (Zero external icon dependency issues) ---
+    // =========================================================================
+    // 【管理員設定區】請將部署完成的 Google Apps Script 網頁應用程式網址貼在下方引號內
+    // 範例：const SHEET_API_URL = "https://script.google.com/macros/s/AKfycbx.../exec";
+    // 若維持空字串 ""，網頁會自動顯示內建的 15 筆範例資料供介面預覽
+    // =========================================================================
+    const SHEET_API_URL = "https://script.google.com/a/macros/gogoro.com/s/AKfycbw9Ga8BEf9LDcmN1QX71E7miJzmFuFUd5ASaBcBOxndAXD54tSoTHUIX-NduWCvUMLR/exec";
+
+    // 點燈目標總數（進度條分母）
+    const GOAL = 50;
+
+    // 背景自動更新間隔（秒），設為 0 則關閉自動輪詢（建議 30 秒，適合現場投影與即時互動）
+    const AUTO_REFRESH_SECONDS = 30;
+    // =========================================================================
+
+    // --- Inline SVG Icons ---
     const IconGift = ({ size = 24, className = '' }) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
         <rect x="3" y="8" width="18" height="4" rx="1" />
@@ -139,16 +147,25 @@
       </svg>
     );
 
+    const IconRefresh = ({ size = 14, className = '' }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+        <path d="M21 3v5h-5" />
+        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+        <path d="M8 16H3v5" />
+      </svg>
+    );
+
     const IconMessageSquare = ({ size = 48, className = '' }) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
     );
 
-    // --- Configuration & Constants ---
-    const DEPARTMENTS = ['業務部', '工程部', '行銷部', '人資部', '產品部', '客服部'];
+    // --- Constants ---
+    const PREFERRED_DEPT_ORDER = ['業務部', '工程部', '行銷部', '人資部', '產品部', '客服部'];
     const LIGHT_COLORS = ['#ff2a2a', '#ffb82a', '#2a82ff', '#2aff82', '#ff2ae1', '#b82aff', '#2affff'];
-    const GOAL = 50;
+
     // Normalized coordinates (0-100) within the source background image's Christmas tree crown
     const TREE_LAYERS = [
       { A: { x: 50, y: 24 }, B: { x: 43, y: 44 }, C: { x: 57, y: 44 }, weight: 1 },
@@ -156,23 +173,34 @@
       { A: { x: 50, y: 50 }, B: { x: 34, y: 78 }, C: { x: 66, y: 78 }, weight: 3 }
     ];
 
-    // --- Helper Functions ---
-    function getRandomPointInTriangle(A, B, C) {
-      const r1 = Math.random();
-      const r2 = Math.random();
-      const sqrtR1 = Math.sqrt(r1);
-      
-      const x = (1 - sqrtR1) * A.x + (sqrtR1 * (1 - r2)) * B.x + (r2 * sqrtR1) * C.x;
-      const y = (1 - sqrtR1) * A.y + (sqrtR1 * (1 - r2)) * B.y + (r2 * sqrtR1) * C.y;
-      
-      return { x, y };
+    // --- Deterministic PRNG so each row's light stays permanently fixed on the tree ---
+    function createSeededRng(seed) {
+      let a = (seed + 1) * 2654435761;
+      return function() {
+        a |= 0;
+        a = a + 0x6D2B79F5 | 0;
+        let t = Math.imul(a ^ a >>> 15, 1 | a);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
     }
 
-    function generateTreePosition() {
+    function getSeededPointInTriangle(A, B, C, rng) {
+      const r1 = rng();
+      const r2 = rng();
+      const sqrtR1 = Math.sqrt(r1);
+      return {
+        x: (1 - sqrtR1) * A.x + (sqrtR1 * (1 - r2)) * B.x + (r2 * sqrtR1) * C.x,
+        y: (1 - sqrtR1) * A.y + (sqrtR1 * (1 - r2)) * B.y + (r2 * sqrtR1) * C.y,
+      };
+    }
+
+    function generateDeterministicTreePosition(seedId) {
+      const rng = createSeededRng(Number(seedId) || 1);
       const totalWeight = TREE_LAYERS.reduce((sum, layer) => sum + layer.weight, 0);
-      let randomVal = Math.random() * totalWeight;
+      let randomVal = rng() * totalWeight;
       let selectedLayer = TREE_LAYERS[2];
-      
+
       for (let layer of TREE_LAYERS) {
         if (randomVal < layer.weight) {
           selectedLayer = layer;
@@ -180,8 +208,24 @@
         }
         randomVal -= layer.weight;
       }
-      
-      return getRandomPointInTriangle(selectedLayer.A, selectedLayer.B, selectedLayer.C);
+
+      return getSeededPointInTriangle(selectedLayer.A, selectedLayer.B, selectedLayer.C, rng);
+    }
+
+    function decorateMessages(rawList) {
+      return rawList.map((msg, idx) => {
+        const numericId = Number(msg.id) || (idx + 2);
+        const pos = generateDeterministicTreePosition(numericId);
+        return {
+          ...msg,
+          id: numericId,
+          timestamp: msg.timestamp || new Date(msg.date || Date.now()).getTime() + idx,
+          color: LIGHT_COLORS[numericId % LIGHT_COLORS.length],
+          x: pos.x,
+          y: pos.y,
+          delay: ((numericId * 0.37) % 2).toFixed(2) + 's',
+        };
+      });
     }
 
     // Maps normalized image coordinates onto the rendered cover background across portrait & landscape viewports
@@ -192,13 +236,11 @@
 
       let renderW, renderH, offsetX, offsetY;
       if (vpRatio < imgRatio) {
-        // Portrait mobile/tablet: height fills viewport, width scales & centers on the tree
         renderH = vpHeight;
         renderW = vpHeight * imgRatio;
         offsetX = (vpWidth - renderW) * focalX;
         offsetY = 0;
       } else {
-        // Landscape/desktop: width fills viewport, height scales proportionally
         renderW = vpWidth;
         renderH = vpWidth / imgRatio;
         offsetX = 0;
@@ -214,35 +256,33 @@
       };
     }
 
-    // Mock Data (Traditional Chinese Workplace Gratitude Messages)
-    const RAW_MESSAGES = [
-      { id: 1, sender: '陳經理', recipient: '林小華', department: '業務部', message: '感謝小華這個月拚盡全力，幫公司拿下年底最大的一筆企業訂單，辛苦了！', date: '2024-12-20' },
-      { id: 2, sender: '王大明', recipient: '張工程師', department: '工程部', message: '謝謝你週末還幫忙緊急修復系統崩潰的問題，拯救了大家的心血。', date: '2024-12-21' },
-      { id: 3, sender: '李行銷', recipient: '設計團隊', department: '行銷部', message: '聖誕節活動的視覺設計超級美！客戶回饋非常滿意，愛死你們了！', date: '2024-12-21' },
-      { id: 4, sender: 'HR 團隊', recipient: '全體員工', department: '人資部', message: '感謝大家熱情參與今年的健康月活動，看到大家都充滿活力真的很棒！', date: '2024-12-22' },
-      { id: 5, sender: '趙總監', recipient: '產品開發組', department: '產品部', message: '新產品的發布會大成功，感謝所有為此熬夜趕工的夥伴，我們做到了。', date: '2024-12-22' },
-      { id: 6, sender: '吳客服', recipient: '退換貨處理小組', department: '客服部', message: '雙11檔期的客訴量爆增，謝謝你們超高效率的支援，順利度過難關！', date: '2024-12-23' },
-      { id: 7, sender: '孫專員', recipient: '鄭企劃', department: '行銷部', message: '謝謝你手把手教我如何做競品分析，讓我學到很多實用的技巧。', date: '2024-12-23' },
-      { id: 8, sender: '周副總', recipient: '第一業務課', department: '業務部', message: '本季業績達成率 120%，為你們感到驕傲，繼續保持！', date: '2024-12-24' },
-      { id: 9, sender: '錢工程師', recipient: '雲端架構組', department: '工程部', message: '伺服器轉移過程完全沒有中斷服務，這技術力太神了，感謝各位大神。', date: '2024-12-24' },
-      { id: 10, sender: '福利委員', recipient: '總務阿姨', department: '人資部', message: '謝謝阿姨每天都把辦公室打掃得乾乾淨淨，還常常請我們吃點心。', date: '2024-12-24' },
-      { id: 11, sender: '產品經理', recipient: 'QA 團隊', department: '產品部', message: '感謝你們在最後一刻抓出了致命的邏輯錯誤，避免了上線後的災難。', date: '2024-12-25' },
-      { id: 12, sender: '客服主管', recipient: '夜班客服團隊', department: '客服部', message: '寒流來襲的半夜還要值班接電話，大家真的辛苦了，暖暖包已備妥！', date: '2024-12-25' },
-      { id: 13, sender: '林特助', recipient: '李司機', department: '人資部', message: '感謝李大哥這一年來安全接送長官們到處奔波，使命必達。', date: '2024-12-25' },
-      { id: 14, sender: '視覺指導', recipient: '前端工程師', department: '工程部', message: '謝謝前端大神完美還原了我的設計稿，連動畫細節都做得一模一樣！', date: '2024-12-25' },
-      { id: 15, sender: 'CEO', recipient: '全體員工', department: '人資部', message: '今年大家都辛苦了，感謝每一位夥伴的付出，祝大家聖誕快樂，明年再創佳績！', date: '2024-12-25' }
+    // Fallback Mock Data (used only when SHEET_API_URL is empty)
+    const FALLBACK_RAW_MESSAGES = [
+      { id: 2, sender: '陳經理', recipient: '林小華', department: '業務部', message: '感謝小華這個月拚盡全力，幫公司拿下年底最大的一筆企業訂單，辛苦了！', date: '2024-12-20' },
+      { id: 3, sender: '王大明', recipient: '張工程師', department: '工程部', message: '謝謝你週末還幫忙緊急修復系統崩潰的問題，拯救了大家的心血。', date: '2024-12-21' },
+      { id: 4, sender: '李行銷', recipient: '設計團隊', department: '行銷部', message: '聖誕節活動的視覺設計超級美！客戶回饋非常滿意，愛死你們了！', date: '2024-12-21' },
+      { id: 5, sender: 'HR 團隊', recipient: '全體員工', department: '人資部', message: '感謝大家熱情參與今年的健康月活動，看到大家都充滿活力真的很棒！', date: '2024-12-22' },
+      { id: 6, sender: '趙總監', recipient: '產品開發組', department: '產品部', message: '新產品的發布會大成功，感謝所有為此熬夜趕工的夥伴，我們做到了。', date: '2024-12-22' },
+      { id: 7, sender: '吳客服', recipient: '退換貨處理小組', department: '客服部', message: '雙11檔期的客訴量爆增，謝謝你們超高效率的支援，順利度過難關！', date: '2024-12-23' },
+      { id: 8, sender: '孫專員', recipient: '鄭企劃', department: '行銷部', message: '謝謝你手把手教我如何做競品分析，讓我學到很多實用的技巧。', date: '2024-12-23' },
+      { id: 9, sender: '周副總', recipient: '第一業務課', department: '業務部', message: '本季業績達成率 120%，為你們感到驕傲，繼續保持！', date: '2024-12-24' },
+      { id: 10, sender: '錢工程師', recipient: '雲端架構組', department: '工程部', message: '伺服器轉移過程完全沒有中斷服務，這技術力太神了，感謝各位大神。', date: '2024-12-24' },
+      { id: 11, sender: '福利委員', recipient: '總務阿姨', department: '人資部', message: '謝謝阿姨每天都把辦公室打掃得乾乾淨淨，還常常請我們吃點心。', date: '2024-12-24' },
+      { id: 12, sender: '產品經理', recipient: 'QA 團隊', department: '產品部', message: '感謝你們在最後一刻抓出了致命的邏輯錯誤，避免了上線後的災難。', date: '2024-12-25' },
+      { id: 13, sender: '客服主管', recipient: '夜班客服團隊', department: '客服部', message: '寒流來襲的半夜還要值班接電話，大家真的辛苦了，暖暖包已備妥！', date: '2024-12-25' },
+      { id: 14, sender: '林特助', recipient: '李司機', department: '人資部', message: '感謝李大哥這一年來安全接送長官們到處奔波，使命必達。', date: '2024-12-25' },
+      { id: 15, sender: '視覺指導', recipient: '前端工程師', department: '工程部', message: '謝謝前端大神完美還原了我的設計稿，連動畫細節都做得一模一樣！', date: '2024-12-25' },
+      { id: 16, sender: 'CEO', recipient: '全體員工', department: '人資部', message: '今年大家都辛苦了，感謝每一位夥伴的付出，祝大家聖誕快樂，明年再創佳績！', date: '2024-12-25' }
     ];
 
-    const INITIAL_MESSAGES = RAW_MESSAGES.map((msg, idx) => ({
-      ...msg,
-      timestamp: new Date(msg.date).getTime() + idx,
-      color: LIGHT_COLORS[idx % LIGHT_COLORS.length],
-      ...generateTreePosition(),
-      delay: ((idx * 0.37) % 2).toFixed(2) + 's'
-    }));
-
     function App() {
-      const [messages] = useState(INITIAL_MESSAGES);
+      const isLiveMode = Boolean(SHEET_API_URL && SHEET_API_URL.trim());
+      const [messages, setMessages] = useState(() => (isLiveMode ? [] : decorateMessages(FALLBACK_RAW_MESSAGES)));
+      const [isLoading, setIsLoading] = useState(isLiveMode);
+      const [isSyncing, setIsSyncing] = useState(false);
+      const [fetchError, setFetchError] = useState('');
+      const [lastSyncTime, setLastSyncTime] = useState('');
+
       const [activeDept, setActiveDept] = useState('All');
       const [hoveredMsgId, setHoveredMsgId] = useState(null);
       const [searchQuery, setSearchQuery] = useState('');
@@ -251,6 +291,56 @@
         width: typeof window !== 'undefined' ? window.innerWidth : 1280,
         height: typeof window !== 'undefined' ? window.innerHeight : 800,
       }));
+
+      // Fetch messages from Google Apps Script
+      const fetchSheetData = useCallback(async (isBackground = false) => {
+        if (!isLiveMode) return;
+        if (isBackground) {
+          setIsSyncing(true);
+        } else {
+          setIsLoading(true);
+        }
+
+        try {
+          const response = await fetch(SHEET_API_URL.trim(), {
+            method: 'GET',
+            redirect: 'follow',
+          });
+          if (!response.ok) {
+            throw new Error(`HTTP 錯誤 (${response.status})`);
+          }
+          const data = await response.json();
+          if (data && Array.isArray(data.messages)) {
+            setMessages(decorateMessages(data.messages));
+            setFetchError('');
+            const now = new Date();
+            setLastSyncTime(
+              now.toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            );
+          } else {
+            throw new Error('回傳資料格式不正確');
+          }
+        } catch (err) {
+          console.error('GAS Fetch Error:', err);
+          setFetchError('無法讀取 Google 試算表資料，請確認 Apps Script 部署權限已設為「所有人」。');
+        } finally {
+          setIsLoading(false);
+          setIsSyncing(false);
+        }
+      }, [isLiveMode]);
+
+      // Initial fetch + optional periodic polling
+      useEffect(() => {
+        if (!isLiveMode) return;
+        fetchSheetData(false);
+
+        if (AUTO_REFRESH_SECONDS > 0) {
+          const timer = setInterval(() => {
+            fetchSheetData(true);
+          }, AUTO_REFRESH_SECONDS * 1000);
+          return () => clearInterval(timer);
+        }
+      }, [isLiveMode, fetchSheetData]);
 
       // Detect background image natural aspect ratio and track viewport resize/orientation changes
       useEffect(() => {
@@ -279,7 +369,22 @@
 
       const isDesktop = viewport.width >= 1024;
 
-      // Pre-calculate snowflakes once so typing in search does not reset snow positions
+      // Dynamically derive department filter pills from loaded messages
+      const availableDepartments = useMemo(() => {
+        const deptSet = new Set(messages.map(m => m.department).filter(Boolean));
+        const ordered = PREFERRED_DEPT_ORDER.filter(d => deptSet.has(d));
+        const extras = Array.from(deptSet).filter(d => !PREFERRED_DEPT_ORDER.includes(d));
+        return [...ordered, ...extras];
+      }, [messages]);
+
+      // Reset activeDept to 'All' if a department disappears after sheet edit
+      useEffect(() => {
+        if (activeDept !== 'All' && !availableDepartments.includes(activeDept)) {
+          setActiveDept('All');
+        }
+      }, [activeDept, availableDepartments]);
+
+      // Pre-calculate snowflakes once
       const snowflakes = useMemo(() => {
         return Array.from({ length: 30 }).map((_, i) => ({
           id: i,
@@ -319,18 +424,15 @@
       }, []);
 
       return (
-        <div 
+        <div
           className="min-h-[100dvh] bg-[#070b14] text-slate-100 font-sans overflow-x-hidden relative flex flex-col"
           onClick={() => setHoveredMsgId(null)}
         >
           {/* Fixed Responsive Background Image & Atmospheric Overlay */}
           <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-            {/* Full-bleed responsive background focusing on the Christmas tree on portrait & landscape */}
             <div className="absolute inset-0 tree-bg-image transition-all duration-500" />
-            {/* Subtle vignette so the background tree remains clear while floating UI stays legible */}
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,_rgba(7,11,20,0.08)_22%,_rgba(7,11,20,0.52)_72%,_rgba(2,6,23,0.82)_100%)] lg:bg-[radial-gradient(circle_at_center,_rgba(7,11,20,0.12)_25%,_rgba(7,11,20,0.55)_75%,_rgba(2,6,23,0.78)_100%)]" />
             
-            {/* Snowfall particles */}
             {snowflakes.map((flake) => (
               <div
                 key={`snow-${flake.id}`}
@@ -348,7 +450,7 @@
             ))}
           </div>
 
-          {/* Interactive Gratitude Lights locked onto the Background Tree across all screen ratios */}
+          {/* Interactive Gratitude Lights locked onto the Background Tree */}
           <div className="fixed inset-0 z-10 pointer-events-none">
             {messages.map((msg) => {
               const isHovered = hoveredMsgId === msg.id;
@@ -362,7 +464,6 @@
                 isDesktop
               );
 
-              // Keep tooltips inside narrow mobile screens without horizontal clipping
               const tooltipAlignClass =
                 pos.x < 32
                   ? 'left-0 translate-x-0'
@@ -416,7 +517,7 @@
                       </span>
                     </div>
                     <p className="text-xs text-slate-100 leading-relaxed mb-2 line-clamp-3">
-                      "{msg.message}"
+                      「{msg.message}」
                     </p>
                     <div className="text-[11px] text-slate-400 text-right font-medium truncate">
                       From: {msg.sender}
@@ -428,12 +529,10 @@
             })}
           </div>
 
-          {/* Main Responsive Container:
-              - Mobile/Tablet (< lg): Top hero stage showcases the unobstructed portrait Christmas tree, followed smoothly by Progress & Cards
-              - Desktop (>= lg): Full-height cockpit with left progress bar and right floating card drawer */}
+          {/* Main Responsive Container */}
           <div className="relative z-20 w-full max-w-[1440px] mx-auto px-3.5 sm:px-6 py-4 sm:py-6 lg:h-screen flex flex-col justify-between pointer-events-none">
             
-            {/* Mobile/Tablet Hero Tree Stage (keeps the center tree completely clear on portrait phones) */}
+            {/* Mobile/Tablet Hero Tree Stage */}
             <div className="min-h-[68svh] sm:min-h-[72svh] lg:min-h-0 flex flex-col justify-between lg:contents">
               {/* Top-Left Compact Header */}
               <header className="flex-shrink-0 flex flex-col items-start pointer-events-auto max-w-md">
@@ -443,12 +542,33 @@
                     Company Gratitude Tree
                   </h1>
                 </div>
-                <p className="text-slate-200/95 text-xs sm:text-sm font-light drop-shadow bg-slate-950/45 backdrop-blur-sm px-3 py-1.5 rounded-xl">
-                  點擊樹上的燈光或下方感謝卡，一起點亮聖誕祝福。
-                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-slate-200/95 text-xs sm:text-sm font-light drop-shadow bg-slate-950/45 backdrop-blur-sm px-3 py-1.5 rounded-xl">
+                    點擊樹上的燈光或感謝卡，一起點亮聖誕祝福。
+                  </p>
+                  {isLiveMode ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fetchSheetData(true);
+                      }}
+                      title="立即同步最新試算表資料"
+                      className="inline-flex items-center gap-1.5 text-[11px] text-emerald-300 bg-emerald-950/60 hover:bg-emerald-900/70 border border-emerald-500/30 px-2.5 py-1 rounded-full backdrop-blur-sm transition-colors touch-manipulation"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>{lastSyncTime ? `已同步 ${lastSyncTime}` : '連線中'}</span>
+                      <IconRefresh size={12} className={isSyncing ? 'animate-spin' : ''} />
+                    </button>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] text-amber-200/90 bg-amber-950/60 border border-amber-500/30 px-2.5 py-1 rounded-full backdrop-blur-sm">
+                      範例資料預覽模式
+                    </span>
+                  )}
+                </div>
               </header>
 
-              {/* Progress Bar: Bottom of Hero Tree on Mobile/Tablet, Bottom-Left on Desktop */}
+              {/* Progress Bar: Mobile/Tablet */}
               <div className="w-full lg:w-[340px] xl:w-[370px] glass-panel rounded-3xl p-4 md:p-5 relative overflow-hidden group flex-shrink-0 pointer-events-auto lg:hidden mt-auto">
                 <div className="flex justify-between items-center mb-1.5">
                   <h3 className="text-xs sm:text-sm font-semibold flex items-center gap-1.5 text-slate-100">
@@ -503,9 +623,16 @@
                 </div>
               </div>
 
-              {/* Search, Department Filters & Gratitude Cards (Flows naturally below tree on Mobile/Tablet, Fixed Drawer on Desktop) */}
+              {/* Search, Department Filters & Gratitude Cards */}
               <aside className="w-full lg:w-[460px] xl:w-[520px] flex flex-col lg:h-full lg:max-h-[82vh] pointer-events-auto">
                 
+                {/* Error Alert Banner (if GAS URL fails) */}
+                {fetchError && (
+                  <div className="mb-3 rounded-2xl bg-rose-950/85 border border-rose-500/40 px-4 py-3 text-xs text-rose-200 backdrop-blur-md">
+                    {fetchError}
+                  </div>
+                )}
+
                 {/* Search & Filters Controls */}
                 <div className="glass-panel rounded-3xl p-4 sm:p-5 mb-3 flex-shrink-0 space-y-3">
                   <div className="relative">
@@ -541,7 +668,7 @@
                     >
                       All 總覽 ({messages.length})
                     </button>
-                    {DEPARTMENTS.map(dept => {
+                    {availableDepartments.map(dept => {
                       const count = messages.filter(m => m.department === dept).length;
                       return (
                         <button
@@ -561,13 +688,22 @@
                   </div>
                 </div>
 
-                {/* Message List: Natural page scroll on Mobile/Tablet, internal scroll on Desktop */}
+                {/* Message List */}
                 <div className="lg:flex-grow lg:overflow-y-auto custom-scrollbar lg:pr-1 pb-2">
-                  {filteredMessages.length === 0 ? (
+                  {isLoading ? (
+                    <div className="glass-panel rounded-3xl p-10 text-center flex flex-col items-center justify-center">
+                      <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin mb-3" />
+                      <p className="text-sm text-slate-200 font-medium">正在收集大家的聖誕祝福...</p>
+                    </div>
+                  ) : filteredMessages.length === 0 ? (
                     <div className="glass-panel rounded-3xl p-10 text-center flex flex-col items-center justify-center">
                       <IconMessageSquare size={42} className="text-slate-400 mb-3" />
-                      <p className="text-base text-slate-100 font-medium">找不到符合條件的感謝留言</p>
-                      <p className="text-xs text-slate-400 mt-1.5">請嘗試更換搜尋關鍵字或切換其他部門分類</p>
+                      <p className="text-base text-slate-100 font-medium">
+                        {messages.length === 0 ? '目前還沒有感謝留言，快來點亮第一盞燈！' : '找不到符合條件的感謝留言'}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1.5">
+                        {messages.length === 0 ? '填寫 Google 表單後，聖誕樹就會自動亮燈' : '請嘗試更換搜尋關鍵字或切換其他部門分類'}
+                      </p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3">
@@ -598,13 +734,12 @@
                                 From: {msg.sender}
                               </h5>
                             </div>
-                            {/* Dot Indicator matching tree light */}
                             <div
                               className="w-3 h-3 rounded-full flex-shrink-0 mt-1"
                               style={{ backgroundColor: msg.color, boxShadow: `0 0 10px ${msg.color}` }}
                             />
                           </div>
-                          <p className="text-slate-200 text-xs sm:text-sm leading-relaxed flex-grow">
+                          <p className="text-slate-200 text-xs sm:text-sm leading-relaxed flex-grow whitespace-pre-line">
                             「{msg.message}」
                           </p>
                         </div>
