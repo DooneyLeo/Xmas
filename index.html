@@ -1,394 +1,534 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Sparkles, Star, TreePine, Gift, MessageSquare } from 'lucide-react';
-
-// --- Configuration & Constants ---
-const DEPARTMENTS = ['業務部', '工程部', '行銷部', '人資部', '產品部', '客服部'];
-const LIGHT_COLORS = ['#ff2a2a', '#ffb82a', '#2a82ff', '#2aff82', '#ff2ae1', '#b82aff', '#2affff'];
-const GOAL = 50;
-
-// Triangle vertices for the 3 layers of the tree to calculate accurate light placement
-const TREE_LAYERS = [
-  { A: {x: 50, y: 15}, B: {x: 35, y: 45}, C: {x: 65, y: 45}, weight: 1 },
-  { A: {x: 50, y: 30}, B: {x: 25, y: 65}, C: {x: 75, y: 65}, weight: 2 },
-  { A: {x: 50, y: 50}, B: {x: 15, y: 90}, C: {x: 85, y: 90}, weight: 3 }
-];
-
-// --- Helper Functions ---
-// Uniformly distribute points inside a triangle using barycentric coordinates
-function getRandomPointInTriangle(A, B, C) {
-  const r1 = Math.random();
-  const r2 = Math.random();
-  const sqrtR1 = Math.sqrt(r1);
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Company Gratitude Tree | 企業聖誕感謝樹</title>
   
-  const x = (1 - sqrtR1) * A.x + (sqrtR1 * (1 - r2)) * B.x + (r2 * sqrtR1) * C.x;
-  const y = (1 - sqrtR1) * A.y + (sqrtR1 * (1 - r2)) * B.y + (r2 * sqrtR1) * C.y;
+  <!-- Google Fonts: Inter & Noto Sans TC for crisp Traditional Chinese typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;600;700;900&display=swap" rel="stylesheet">
   
-  return { x, y };
-}
-
-function generateTreePosition() {
-  // Randomly select a layer based on weight (bottom layer has more area)
-  const totalWeight = TREE_LAYERS.reduce((sum, layer) => sum + layer.weight, 0);
-  let randomVal = Math.random() * totalWeight;
-  let selectedLayer = TREE_LAYERS[2]; // Default to bottom
-  
-  for (let layer of TREE_LAYERS) {
-    if (randomVal < layer.weight) {
-      selectedLayer = layer;
-      break;
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'Noto Sans TC', 'sans-serif'],
+          },
+        },
+      },
     }
-    randomVal -= layer.weight;
-  }
+  </script>
+
+  <!-- React 18 & ReactDOM 18 UMD -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   
-  return getRandomPointInTriangle(selectedLayer.A, selectedLayer.B, selectedLayer.C);
-}
+  <!-- Babel Standalone for in-browser JSX compilation -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-// Initial Mock Data (Traditional Chinese & Rich Data)
-const RAW_MESSAGES = [
-  { id: 1, sender: '陳經理', recipient: '林小華', department: '業務部', message: '感謝小華這個月拚盡全力，幫公司拿下年底最大的一筆企業訂單，辛苦了！', date: '2023-12-20' },
-  { id: 2, sender: '王大明', recipient: '張工程師', department: '工程部', message: '謝謝你週末還幫忙緊急修復系統崩潰的問題，拯救了大家的心血。', date: '2023-12-21' },
-  { id: 3, sender: '李行銷', recipient: '設計團隊', department: '行銷部', message: '聖誕節活動的視覺設計超級美！客戶回饋非常滿意，愛死你們了！', date: '2023-12-21' },
-  { id: 4, sender: 'HR 團隊', recipient: '全體員工', department: '人資部', message: '感謝大家熱情參與今年的健康月活動，看到大家都充滿活力真的很棒！', date: '2023-12-22' },
-  { id: 5, sender: '趙總監', recipient: '產品開發組', department: '產品部', message: '新產品的發布會大成功，感謝所有為此熬夜趕工的夥伴，我們做到了。', date: '2023-12-22' },
-  { id: 6, sender: '吳客服', recipient: '退換貨處理小組', department: '客服部', message: '雙11檔期的客訴量爆增，謝謝你們超高效率的支援，順利度過難關！', date: '2023-12-23' },
-  { id: 7, sender: '孫專員', recipient: '鄭企劃', department: '行銷部', message: '謝謝你手把手教我如何做競品分析，讓我學到很多實用的技巧。', date: '2023-12-23' },
-  { id: 8, sender: '周副總', recipient: '第一業務課', department: '業務部', message: '本季業績達成率 120%，為你們感到驕傲，繼續保持！', date: '2023-12-24' },
-  { id: 9, sender: '錢工程師', recipient: '雲端架構組', department: '工程部', message: '伺服器轉移過程完全沒有中斷服務，這技術力太神了，感謝各位大神。', date: '2023-12-24' },
-  { id: 10, sender: '福利委員', recipient: '總務阿姨', department: '人資部', message: '謝謝阿姨每天都把辦公室打掃得乾乾淨淨，還常常請我們吃點心。', date: '2023-12-24' },
-  { id: 11, sender: '產品經理', recipient: 'QA 團隊', department: '產品部', message: '感謝你們在最後一刻抓出了致命的邏輯錯誤，避免了上線後的災難。', date: '2023-12-25' },
-  { id: 12, sender: '客服主管', recipient: '夜班客服團隊', department: '客服部', message: '寒流來襲的半夜還要值班接電話，大家真的辛苦了，暖暖包已備妥！', date: '2023-12-25' },
-  { id: 13, sender: '林特助', recipient: '李司機', department: '人資部', message: '感謝李大哥這一年來安全接送長官們到處奔波，使命必達。', date: '2023-12-25' },
-  { id: 14, sender: '視覺指導', recipient: '前端工程師', department: '工程部', message: '謝謝前端大神完美還原了我的設計稿，連動畫細節都做得一模一樣！', date: '2023-12-25' },
-  { id: 15, sender: 'CEO', recipient: '全體員工', department: '人資部', message: '今年大家都辛苦了，感謝每一位夥伴的付出，祝大家聖誕快樂，明年再創佳績！', date: '2023-12-25' }
-];
+  <style>
+    @keyframes twinkle {
+      0%, 100% { opacity: 0.85; transform: scale(1); filter: brightness(1.1); }
+      50% { opacity: 0.4; transform: scale(0.85); filter: brightness(0.75); }
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-8px); }
+    }
+    @keyframes snowfall {
+      0% { transform: translateY(-10vh) translateX(0); opacity: 0; }
+      20% { opacity: 0.9; }
+      100% { transform: translateY(110vh) translateX(20px); opacity: 0.2; }
+    }
+    @keyframes popIn {
+      0% { transform: scale(0.95) translateY(10px); opacity: 0; }
+      100% { transform: scale(1) translateY(0); opacity: 1; }
+    }
+    .animate-pop-in {
+      animation: popIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.48);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    }
+    .glass-input {
+      background: rgba(15, 23, 42, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: white;
+    }
+    .glass-input:focus {
+      background: rgba(15, 23, 42, 0.75);
+      border-color: rgba(52, 211, 153, 0.55);
+      outline: none;
+    }
+    /* Custom Scrollbar for message list */
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 10px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.35); }
+  </style>
+</head>
+<body class="bg-[#070b14] text-slate-100 antialiased selection:bg-emerald-500/30">
+  <div id="root"></div>
 
-const INITIAL_MESSAGES = RAW_MESSAGES.map(msg => ({
-  ...msg,
-  timestamp: new Date(msg.date).getTime(),
-  color: LIGHT_COLORS[Math.floor(Math.random() * LIGHT_COLORS.length)],
-  ...generateTreePosition(),
-  delay: Math.random() * 2 + 's'
-}));
+  <script type="text/babel">
+    const { useState, useMemo } = React;
 
-export default function App() {
-  const [messages, setMessages] = useState(INITIAL_MESSAGES);
-  const [activeDept, setActiveDept] = useState('All');
-  const [hoveredMsgId, setHoveredMsgId] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
+    // --- Inline SVG Icons (Zero external icon dependency issues) ---
+    const IconGift = ({ size = 24, className = '' }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <rect x="3" y="8" width="18" height="4" rx="1" />
+        <path d="M12 8v13" />
+        <path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
+        <path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5" />
+      </svg>
+    );
 
-  // Combined Search & Filter logic
-  const filteredMessages = useMemo(() => {
-    return messages
-      .filter(msg => activeDept === 'All' || msg.department === activeDept)
-      .filter(msg => {
-        if (!searchQuery.trim()) return true;
-        const query = searchQuery.toLowerCase();
-        return msg.sender.toLowerCase().includes(query) || 
-               msg.recipient.toLowerCase().includes(query) || 
-               msg.message.toLowerCase().includes(query);
-      })
-      .sort((a, b) => b.timestamp - a.timestamp);
-  }, [messages, activeDept, searchQuery]);
+    const IconSparkles = ({ size = 18, className = '' }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+        <path d="M5 3v4" />
+        <path d="M19 17v4" />
+        <path d="M3 5h4" />
+        <path d="M17 19h4" />
+      </svg>
+    );
 
-  const progress = Math.min(Math.round((messages.length / GOAL) * 100), 100);
+    const IconStar = ({ size = 24, className = '' }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+      </svg>
+    );
 
-  return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100 font-sans selection:bg-emerald-500/30 overflow-x-hidden relative flex flex-col">
+    const IconSearch = ({ size = 20, className = '' }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <circle cx="11" cy="11" r="8" />
+        <path d="m21 21-4.3-4.3" />
+      </svg>
+    );
+
+    const IconX = ({ size = 16, className = '' }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M18 6 6 18" />
+        <path d="m6 6 12 12" />
+      </svg>
+    );
+
+    const IconMessageSquare = ({ size = 48, className = '' }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+    );
+
+    // --- Configuration & Constants ---
+    const DEPARTMENTS = ['業務部', '工程部', '行銷部', '人資部', '產品部', '客服部'];
+    const LIGHT_COLORS = ['#ff2a2a', '#ffb82a', '#2a82ff', '#2aff82', '#ff2ae1', '#b82aff', '#2affff'];
+    const GOAL = 50;
+
+    // Triangle vertices for the 3 layers of the tree to calculate accurate light placement
+    const TREE_LAYERS = [
+      { A: { x: 50, y: 15 }, B: { x: 35, y: 45 }, C: { x: 65, y: 45 }, weight: 1 },
+      { A: { x: 50, y: 30 }, B: { x: 25, y: 65 }, C: { x: 75, y: 65 }, weight: 2 },
+      { A: { x: 50, y: 50 }, B: { x: 15, y: 90 }, C: { x: 85, y: 90 }, weight: 3 }
+    ];
+
+    // --- Helper Functions ---
+    function getRandomPointInTriangle(A, B, C) {
+      const r1 = Math.random();
+      const r2 = Math.random();
+      const sqrtR1 = Math.sqrt(r1);
       
-      {/* Global CSS for Animations */}
-      <style dangerouslySetInnerHTML={{__html: `
-        @keyframes twinkle {
-          0%, 100% { opacity: 0.8; transform: scale(1); filter: brightness(1); }
-          50% { opacity: 0.4; transform: scale(0.85); filter: brightness(0.7); }
-        }
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-8px); }
-        }
-        @keyframes snowfall {
-          0% { transform: translateY(-10vh) translateX(0); opacity: 0; }
-          20% { opacity: 1; }
-          100% { transform: translateY(110vh) translateX(20px); opacity: 0.3; }
-        }
-        @keyframes popIn {
-          0% { transform: scale(0.9) translateY(10px); opacity: 0; }
-          100% { transform: scale(1) translateY(0); opacity: 1; }
-        }
-        .animate-pop-in { animation: popIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        .glass-panel {
-          background: rgba(15, 23, 42, 0.4);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
-        }
-        .glass-input {
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          color: white;
-        }
-        .glass-input:focus {
-          background: rgba(255, 255, 255, 0.06);
-          border-color: rgba(52, 211, 153, 0.5);
-          outline: none;
-        }
-        /* Custom Scrollbar for message list */
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
-      `}} />
+      const x = (1 - sqrtR1) * A.x + (sqrtR1 * (1 - r2)) * B.x + (r2 * sqrtR1) * C.x;
+      const y = (1 - sqrtR1) * A.y + (sqrtR1 * (1 - r2)) * B.y + (r2 * sqrtR1) * C.y;
+      
+      return { x, y };
+    }
 
-      {/* Animated Starry/Snow Background */}
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-[#070b14] to-black opacity-80"></div>
-        {Array.from({ length: 30 }).map((_, i) => (
-          <div 
-            key={`snow-${i}`}
-            className="absolute rounded-full bg-white"
-            style={{
-              width: Math.random() * 3 + 1 + 'px',
-              height: Math.random() * 3 + 1 + 'px',
-              left: Math.random() * 100 + '%',
-              top: Math.random() * 100 + '%',
-              opacity: Math.random() * 0.5 + 0.1,
-              animation: `snowfall ${Math.random() * 10 + 15}s linear infinite`,
-              animationDelay: `-${Math.random() * 20}s`
-            }}
-          />
-        ))}
-      </div>
+    function generateTreePosition() {
+      const totalWeight = TREE_LAYERS.reduce((sum, layer) => sum + layer.weight, 0);
+      let randomVal = Math.random() * totalWeight;
+      let selectedLayer = TREE_LAYERS[2];
+      
+      for (let layer of TREE_LAYERS) {
+        if (randomVal < layer.weight) {
+          selectedLayer = layer;
+          break;
+        }
+        randomVal -= layer.weight;
+      }
+      
+      return getRandomPointInTriangle(selectedLayer.A, selectedLayer.B, selectedLayer.C);
+    }
 
-      {/* Main Container - Full height on desktop */}
-      <div className="relative z-10 w-full max-w-7xl mx-auto px-4 py-6 lg:py-8 lg:h-screen flex flex-col">
-        
-        {/* Header Section */}
-        <header className="mb-6 flex-shrink-0 text-center flex flex-col items-center">
-          <div className="inline-flex items-center justify-center p-3 glass-panel rounded-2xl mb-3 shadow-emerald-900/20 shadow-2xl">
-            <Gift className="text-emerald-400 mr-3" size={28} />
-            <h1 className="text-2xl md:text-4xl font-extrabold bg-gradient-to-br from-white via-emerald-100 to-teal-400 bg-clip-text text-transparent">
-              Company Gratitude Tree
-            </h1>
-          </div>
-          <p className="text-slate-400 text-sm md:text-base max-w-2xl font-light">
-            感謝有你，點亮聖誕。每一條留言都將化作樹上的一盞溫暖燈光。
-          </p>
-        </header>
+    // Mock Data (Traditional Chinese Workplace Gratitude Messages)
+    const RAW_MESSAGES = [
+      { id: 1, sender: '陳經理', recipient: '林小華', department: '業務部', message: '感謝小華這個月拚盡全力，幫公司拿下年底最大的一筆企業訂單，辛苦了！', date: '2024-12-20' },
+      { id: 2, sender: '王大明', recipient: '張工程師', department: '工程部', message: '謝謝你週末還幫忙緊急修復系統崩潰的問題，拯救了大家的心血。', date: '2024-12-21' },
+      { id: 3, sender: '李行銷', recipient: '設計團隊', department: '行銷部', message: '聖誕節活動的視覺設計超級美！客戶回饋非常滿意，愛死你們了！', date: '2024-12-21' },
+      { id: 4, sender: 'HR 團隊', recipient: '全體員工', department: '人資部', message: '感謝大家熱情參與今年的健康月活動，看到大家都充滿活力真的很棒！', date: '2024-12-22' },
+      { id: 5, sender: '趙總監', recipient: '產品開發組', department: '產品部', message: '新產品的發布會大成功，感謝所有為此熬夜趕工的夥伴，我們做到了。', date: '2024-12-22' },
+      { id: 6, sender: '吳客服', recipient: '退換貨處理小組', department: '客服部', message: '雙11檔期的客訴量爆增，謝謝你們超高效率的支援，順利度過難關！', date: '2024-12-23' },
+      { id: 7, sender: '孫專員', recipient: '鄭企劃', department: '行銷部', message: '謝謝你手把手教我如何做競品分析，讓我學到很多實用的技巧。', date: '2024-12-23' },
+      { id: 8, sender: '周副總', recipient: '第一業務課', department: '業務部', message: '本季業績達成率 120%，為你們感到驕傲，繼續保持！', date: '2024-12-24' },
+      { id: 9, sender: '錢工程師', recipient: '雲端架構組', department: '工程部', message: '伺服器轉移過程完全沒有中斷服務，這技術力太神了，感謝各位大神。', date: '2024-12-24' },
+      { id: 10, sender: '福利委員', recipient: '總務阿姨', department: '人資部', message: '謝謝阿姨每天都把辦公室打掃得乾乾淨淨，還常常請我們吃點心。', date: '2024-12-24' },
+      { id: 11, sender: '產品經理', recipient: 'QA 團隊', department: '產品部', message: '感謝你們在最後一刻抓出了致命的邏輯錯誤，避免了上線後的災難。', date: '2024-12-25' },
+      { id: 12, sender: '客服主管', recipient: '夜班客服團隊', department: '客服部', message: '寒流來襲的半夜還要值班接電話，大家真的辛苦了，暖暖包已備妥！', date: '2024-12-25' },
+      { id: 13, sender: '林特助', recipient: '李司機', department: '人資部', message: '感謝李大哥這一年來安全接送長官們到處奔波，使命必達。', date: '2024-12-25' },
+      { id: 14, sender: '視覺指導', recipient: '前端工程師', department: '工程部', message: '謝謝前端大神完美還原了我的設計稿，連動畫細節都做得一模一樣！', date: '2024-12-25' },
+      { id: 15, sender: 'CEO', recipient: '全體員工', department: '人資部', message: '今年大家都辛苦了，感謝每一位夥伴的付出，祝大家聖誕快樂，明年再創佳績！', date: '2024-12-25' }
+    ];
 
-        {/* 2-Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 flex-grow lg:min-h-0 pb-4">
-          
-          {/* Left Column: Tree & Progress (Sticky on mobile, fills height on desktop) */}
-          <div className="lg:col-span-5 flex flex-col gap-6 h-[600px] lg:h-full">
+    const INITIAL_MESSAGES = RAW_MESSAGES.map((msg, idx) => ({
+      ...msg,
+      timestamp: new Date(msg.date).getTime() + idx,
+      color: LIGHT_COLORS[idx % LIGHT_COLORS.length],
+      ...generateTreePosition(),
+      delay: ((idx * 0.37) % 2).toFixed(2) + 's'
+    }));
+
+    function App() {
+      const [messages] = useState(INITIAL_MESSAGES);
+      const [activeDept, setActiveDept] = useState('All');
+      const [hoveredMsgId, setHoveredMsgId] = useState(null);
+      const [searchQuery, setSearchQuery] = useState('');
+
+      // Pre-calculate snowflakes once so typing in search does not reset snow positions
+      const snowflakes = useMemo(() => {
+        return Array.from({ length: 30 }).map((_, i) => ({
+          id: i,
+          size: Math.random() * 3 + 1.5 + 'px',
+          left: Math.random() * 100 + '%',
+          top: Math.random() * 100 + '%',
+          opacity: Math.random() * 0.5 + 0.15,
+          duration: Math.random() * 10 + 15 + 's',
+          delay: `-${Math.random() * 20}s`
+        }));
+      }, []);
+
+      // Combined Search & Department Filter logic
+      const filteredMessages = useMemo(() => {
+        return messages
+          .filter(msg => activeDept === 'All' || msg.department === activeDept)
+          .filter(msg => {
+            if (!searchQuery.trim()) return true;
+            const query = searchQuery.toLowerCase();
+            return (
+              msg.sender.toLowerCase().includes(query) ||
+              msg.recipient.toLowerCase().includes(query) ||
+              msg.department.toLowerCase().includes(query) ||
+              msg.message.toLowerCase().includes(query)
+            );
+          })
+          .sort((a, b) => b.timestamp - a.timestamp);
+      }, [messages, activeDept, searchQuery]);
+
+      const progress = Math.min(Math.round((messages.length / GOAL) * 100), 100);
+
+      return (
+        <div 
+          className="min-h-screen bg-[#070b14] text-slate-100 font-sans overflow-x-hidden relative flex flex-col"
+          onClick={() => setHoveredMsgId(null)}
+        >
+          {/* Background Image & Atmospheric Overlay */}
+          <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+            {/* Background Christmas Tree Image (place in same folder as index.html on GitHub) */}
+            <div
+              className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105"
+              style={{
+                backgroundImage: "url('./Gemini_Generated_Image_w7um5yw7um5yw7um.jfif')"
+              }}
+            />
+            {/* Dark atmospheric gradient overlay for text contrast */}
+            <div className="absolute inset-0 bg-[#070b14]/65 bg-[radial-gradient(ellipse_at_top,_rgba(15,23,42,0.55),_rgba(7,11,20,0.78)_65%,_rgba(2,6,23,0.92))]" />
             
-            {/* Progress Panel */}
-            <div className="glass-panel rounded-3xl p-5 relative overflow-hidden group flex-shrink-0">
-              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                <Star size={60} />
-              </div>
-              <h3 className="text-base font-semibold flex items-center gap-2 mb-3 text-slate-100">
-                <Sparkles size={18} className="text-yellow-400" />
-                點燈進度 (Gratitude Goal)
-              </h3>
-              <div className="flex justify-between items-end mb-2">
-                <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
-                  {messages.length}
-                </span>
-                <span className="text-slate-400 text-xs font-medium">目標: {GOAL} 盞燈</span>
-              </div>
-              <div className="h-2.5 w-full bg-slate-900/80 rounded-full overflow-hidden border border-white/5">
-                <div 
-                  className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-yellow-400 relative transition-all duration-1000 ease-out rounded-full"
-                  style={{ width: `${progress}%` }}
-                >
-                  <div className="absolute inset-0 bg-white/30" style={{ animation: 'twinkle 2s infinite' }} />
-                </div>
-              </div>
-            </div>
+            {/* Snowfall particles */}
+            {snowflakes.map((flake) => (
+              <div
+                key={`snow-${flake.id}`}
+                className="absolute rounded-full bg-white"
+                style={{
+                  width: flake.size,
+                  height: flake.size,
+                  left: flake.left,
+                  top: flake.top,
+                  opacity: flake.opacity,
+                  animation: `snowfall ${flake.duration} linear infinite`,
+                  animationDelay: flake.delay
+                }}
+              />
+            ))}
+          </div>
 
-            {/* Interactive Christmas Tree */}
-            <div className="flex-grow relative flex items-center justify-center glass-panel rounded-3xl p-6 overflow-hidden">
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3/4 h-3/4 bg-emerald-500/10 blur-[80px] rounded-full pointer-events-none" />
+          {/* Main Container */}
+          <div className="relative z-10 w-full max-w-7xl mx-auto px-4 py-6 lg:py-8 lg:h-screen flex flex-col">
+            
+            {/* Header Section */}
+            <header className="mb-6 flex-shrink-0 text-center flex flex-col items-center">
+              <div className="inline-flex items-center justify-center px-5 py-3 glass-panel rounded-2xl mb-3 shadow-emerald-900/20 shadow-2xl">
+                <IconGift className="text-emerald-400 mr-3 flex-shrink-0" size={28} />
+                <h1 className="text-2xl md:text-4xl font-extrabold bg-gradient-to-br from-white via-emerald-100 to-teal-400 bg-clip-text text-transparent">
+                  Company Gratitude Tree
+                </h1>
+              </div>
+              <p className="text-slate-300 text-sm md:text-base max-w-2xl font-light drop-shadow">
+                感謝有你，點亮聖誕。每一則留言都將化作樹上的一盞溫暖燈光。
+              </p>
+            </header>
+
+            {/* 2-Column Responsive Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 flex-grow lg:min-h-0 pb-4">
               
-              <div className="relative w-full max-w-[320px] aspect-[4/5] drop-shadow-[0_20px_30px_rgba(0,0,0,0.5)]" style={{ animation: 'float 8s ease-in-out infinite' }}>
-                {/* Premium SVG Tree */}
-                <svg viewBox="0 0 100 100" className="w-full h-full" overflow="visible">
-                  {/* Tree Trunk */}
-                  <path d="M 43 85 L 57 85 L 55 98 L 45 98 Z" fill="#3E2723" />
-                  <path d="M 43 85 L 50 85 L 49 98 L 45 98 Z" fill="#2D1C15" />
-
-                  {/* Layer 3 (Bottom) */}
-                  <path d="M 50 50 C 40 50, 20 85, 15 90 C 25 94, 75 94, 85 90 C 80 85, 60 50, 50 50 Z" fill="#0A3B22" />
-                  <path d="M 50 50 L 50 93 C 75 93, 85 90, 85 90 C 80 85, 60 50, 50 50 Z" fill="#062917" />
-                  
-                  {/* Layer 2 (Middle) */}
-                  <path d="M 50 30 C 42 30, 28 60, 25 65 C 35 68, 65 68, 75 65 C 72 60, 58 30, 50 30 Z" fill="#0D5430" />
-                  <path d="M 50 30 L 50 67 C 65 67, 75 65, 75 65 C 72 60, 58 30, 50 30 Z" fill="#0A3F23" />
-                  
-                  {/* Layer 1 (Top) */}
-                  <path d="M 50 15 C 45 15, 37 42, 35 45 C 42 47, 58 47, 65 45 C 63 42, 55 15, 50 15 Z" fill="#117541" />
-                  <path d="M 50 15 L 50 46 C 58 46, 65 45, 65 45 C 63 42, 55 15, 50 15 Z" fill="#0C572F" />
-
-                  {/* Decorative Garland */}
-                  <path d="M 35 45 Q 50 55 70 50" fill="none" stroke="#FFD700" strokeWidth="0.5" strokeDasharray="1, 1" opacity="0.6" />
-                  <path d="M 25 65 Q 50 78 80 70" fill="none" stroke="#FFD700" strokeWidth="0.5" strokeDasharray="1, 1" opacity="0.6" />
-
-                  {/* Top Glowing Star */}
-                  <g style={{ transformOrigin: '50px 10px', animation: 'twinkle 3s ease-in-out infinite' }}>
-                    <path d="M 50 2 L 52 9 L 59 9 L 53 14 L 55 21 L 50 17 L 45 21 L 47 14 L 41 9 L 48 9 Z" fill="#FDE047" />
-                    <circle cx="50" cy="12" r="8" fill="#FDE047" filter="blur(6px)" opacity="0.5" />
-                  </g>
-                </svg>
-
-                {/* Dynamic Lights */}
-                {messages.map((msg) => {
-                  const isHovered = hoveredMsgId === msg.id;
-                  // Hide light slightly if it doesn't match the current search/filter
-                  const isFilteredOut = !filteredMessages.find(m => m.id === msg.id);
-                  
-                  return (
+              {/* Left Column: Progress & Interactive Christmas Tree */}
+              <div className="lg:col-span-5 flex flex-col gap-5 h-[560px] sm:h-[620px] lg:h-full">
+                
+                {/* Progress Panel */}
+                <div className="glass-panel rounded-3xl p-5 relative overflow-hidden group flex-shrink-0">
+                  <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <IconStar size={60} />
+                  </div>
+                  <h3 className="text-base font-semibold flex items-center gap-2 mb-3 text-slate-100">
+                    <IconSparkles size={18} className="text-yellow-400" />
+                    點燈進度 (Gratitude Goal)
+                  </h3>
+                  <div className="flex justify-between items-end mb-2">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
+                        {messages.length}
+                      </span>
+                      <span className="text-xs text-emerald-300/80 font-medium">盞已點亮</span>
+                    </div>
+                    <span className="text-slate-300 text-xs font-medium">目標: {GOAL} 盞燈 ({progress}%)</span>
+                  </div>
+                  <div className="h-2.5 w-full bg-slate-900/80 rounded-full overflow-hidden border border-white/10">
                     <div
-                      key={msg.id}
-                      className="absolute cursor-pointer transition-all duration-300 group"
-                      style={{
-                        left: `${msg.x}%`,
-                        top: `${msg.y}%`,
-                        transform: `translate(-50%, -50%) ${isHovered ? 'scale(1.5)' : 'scale(1)'}`,
-                        zIndex: isHovered ? 40 : 20,
-                        opacity: isFilteredOut ? 0.1 : 1,
-                      }}
-                      onMouseEnter={() => setHoveredMsgId(msg.id)}
-                      onMouseLeave={() => setHoveredMsgId(null)}
+                      className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-yellow-400 relative transition-all duration-1000 ease-out rounded-full"
+                      style={{ width: `${progress}%` }}
                     >
-                      <div 
-                        className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full relative"
-                        style={{ 
-                          backgroundColor: msg.color,
-                          boxShadow: `0 0 10px ${msg.color}, 0 0 20px ${msg.color}`,
-                          animation: isHovered || isFilteredOut ? 'none' : `twinkle 2s ease-in-out infinite`,
-                          animationDelay: msg.delay,
-                        }}
-                      >
-                        <div className="absolute inset-0 bg-white/40 rounded-full w-1/2 h-1/2 m-auto" />
-                      </div>
-
-                      {/* Tooltip */}
-                      <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-56 glass-panel p-3 rounded-xl pointer-events-none transition-all duration-200 origin-bottom z-50 ${isHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}>
-                        <div className="flex justify-between items-center mb-1.5 border-b border-white/10 pb-1.5">
-                          <span className="font-medium text-sm text-emerald-300 line-clamp-1">To: {msg.recipient}</span>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-white/10 text-slate-300 border border-white/5 flex-shrink-0">
-                            {msg.department}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-200 leading-relaxed mb-2 line-clamp-3">
-                          "{msg.message}"
-                        </p>
-                        <div className="text-[10px] text-slate-400 text-right font-medium line-clamp-1">
-                          From: {msg.sender}
-                        </div>
-                        <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white/20" />
-                      </div>
+                      <div className="absolute inset-0 bg-white/30" style={{ animation: 'twinkle 2s infinite' }} />
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column: Search, Filters & Scrollable Cards List */}
-          <div className="lg:col-span-7 flex flex-col h-[700px] lg:h-full">
-            
-            {/* Search & Filters Controls */}
-            <div className="glass-panel rounded-3xl p-5 md:p-6 mb-4 flex-shrink-0 space-y-4">
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                <input 
-                  type="text"
-                  placeholder="搜尋收件人、寄件人或感謝內容..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full glass-input rounded-xl pl-12 pr-4 py-3 transition-all text-sm placeholder:text-slate-500 bg-slate-900/50"
-                />
-              </div>
-              
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => setActiveDept('All')}
-                  className={`px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-all ${
-                    activeDept === 'All' 
-                      ? 'bg-white text-slate-900 shadow-[0_0_15px_rgba(255,255,255,0.4)]' 
-                      : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10'
-                  }`}
-                >
-                  All 總覽
-                </button>
-                {DEPARTMENTS.map(dept => (
-                  <button
-                    key={dept}
-                    onClick={() => setActiveDept(dept)}
-                    className={`px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-all ${
-                      activeDept === dept 
-                        ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] border border-emerald-400' 
-                        : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10'
-                    }`}
-                  >
-                    {dept}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Scrollable Message List */}
-            <div className="flex-grow overflow-y-auto custom-scrollbar pr-1 md:pr-2 pb-8">
-              {filteredMessages.length === 0 ? (
-                <div className="glass-panel rounded-3xl p-12 text-center flex flex-col items-center justify-center mt-4">
-                  <MessageSquare size={48} className="text-slate-600 mb-4" />
-                  <p className="text-lg text-slate-400">找不到符合條件的留言</p>
-                  <p className="text-sm text-slate-500 mt-2">請嘗試更換搜尋關鍵字或部門分類</p>
+                  </div>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {filteredMessages.map((msg, idx) => (
-                    <div 
-                      key={msg.id}
-                      className="glass-panel p-5 rounded-2xl transition-all duration-300 hover:-translate-y-1 hover:border-white/20 hover:shadow-[0_5px_20px_rgba(255,255,255,0.05)] animate-pop-in flex flex-col"
-                      style={{ animationDelay: `${(idx % 10) * 0.05}s` }}
-                      onMouseEnter={() => setHoveredMsgId(msg.id)}
-                      onMouseLeave={() => setHoveredMsgId(null)}
-                    >
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <div className="flex items-center gap-2 mb-1.5">
-                            <span className="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider bg-white/10 text-slate-300 border border-white/5">
-                              {msg.department}
-                            </span>
-                            <span className="text-xs text-slate-500">{msg.date}</span>
+
+                {/* Interactive Christmas Tree */}
+                <div className="flex-grow relative flex items-center justify-center glass-panel rounded-3xl p-6 overflow-hidden">
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3/4 h-3/4 bg-emerald-500/15 blur-[80px] rounded-full pointer-events-none" />
+                  
+                  <div className="relative w-full max-w-[300px] sm:max-w-[320px] aspect-[4/5] drop-shadow-[0_20px_30px_rgba(0,0,0,0.6)]" style={{ animation: 'float 8s ease-in-out infinite' }}>
+                    {/* Vector Christmas Tree */}
+                    <svg viewBox="0 0 100 100" className="w-full h-full" overflow="visible">
+                      {/* Tree Trunk */}
+                      <path d="M 43 85 L 57 85 L 55 98 L 45 98 Z" fill="#3E2723" />
+                      <path d="M 43 85 L 50 85 L 49 98 L 45 98 Z" fill="#2D1C15" />
+
+                      {/* Layer 3 (Bottom) */}
+                      <path d="M 50 50 C 40 50, 20 85, 15 90 C 25 94, 75 94, 85 90 C 80 85, 60 50, 50 50 Z" fill="#0A3B22" />
+                      <path d="M 50 50 L 50 93 C 75 93, 85 90, 85 90 C 80 85, 60 50, 50 50 Z" fill="#062917" />
+                      
+                      {/* Layer 2 (Middle) */}
+                      <path d="M 50 30 C 42 30, 28 60, 25 65 C 35 68, 65 68, 75 65 C 72 60, 58 30, 50 30 Z" fill="#0D5430" />
+                      <path d="M 50 30 L 50 67 C 65 67, 75 65, 75 65 C 72 60, 58 30, 50 30 Z" fill="#0A3F23" />
+                      
+                      {/* Layer 1 (Top) */}
+                      <path d="M 50 15 C 45 15, 37 42, 35 45 C 42 47, 58 47, 65 45 C 63 42, 55 15, 50 15 Z" fill="#117541" />
+                      <path d="M 50 15 L 50 46 C 58 46, 65 45, 65 45 C 63 42, 55 15, 50 15 Z" fill="#0C572F" />
+
+                      {/* Decorative Garland */}
+                      <path d="M 35 45 Q 50 55 70 50" fill="none" stroke="#FFD700" strokeWidth="0.6" strokeDasharray="1, 1" opacity="0.65" />
+                      <path d="M 25 65 Q 50 78 80 70" fill="none" stroke="#FFD700" strokeWidth="0.6" strokeDasharray="1, 1" opacity="0.65" />
+
+                      {/* Top Glowing Star */}
+                      <g style={{ transformOrigin: '50px 10px', animation: 'twinkle 3s ease-in-out infinite' }}>
+                        <path d="M 50 2 L 52 9 L 59 9 L 53 14 L 55 21 L 50 17 L 45 21 L 47 14 L 41 9 L 48 9 Z" fill="#FDE047" />
+                        <circle cx="50" cy="12" r="8" fill="#FDE047" filter="blur(6px)" opacity="0.55" />
+                      </g>
+                    </svg>
+
+                    {/* Dynamic Lights */}
+                    {messages.map((msg) => {
+                      const isHovered = hoveredMsgId === msg.id;
+                      const isFilteredOut = !filteredMessages.some(m => m.id === msg.id);
+                      
+                      return (
+                        <div
+                          key={msg.id}
+                          className="absolute cursor-pointer transition-all duration-300 p-2 -m-2"
+                          style={{
+                            left: `${msg.x}%`,
+                            top: `${msg.y}%`,
+                            transform: `translate(-50%, -50%) ${isHovered ? 'scale(1.45)' : 'scale(1)'}`,
+                            zIndex: isHovered ? 40 : 20,
+                            opacity: isFilteredOut ? 0.12 : 1,
+                          }}
+                          onMouseEnter={() => setHoveredMsgId(msg.id)}
+                          onMouseLeave={() => setHoveredMsgId(null)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setHoveredMsgId(isHovered ? null : msg.id);
+                          }}
+                        >
+                          <div
+                            className="w-3 h-3 md:w-3.5 md:h-3.5 rounded-full relative"
+                            style={{
+                              backgroundColor: msg.color,
+                              boxShadow: `0 0 10px ${msg.color}, 0 0 20px ${msg.color}`,
+                              animation: isHovered || isFilteredOut ? 'none' : 'twinkle 2s ease-in-out infinite',
+                              animationDelay: msg.delay,
+                            }}
+                          >
+                            <div className="absolute inset-0 bg-white/50 rounded-full w-1/2 h-1/2 m-auto" />
                           </div>
-                          <h4 className="font-semibold text-slate-100 text-sm">
-                            To: <span className="text-emerald-400">{msg.recipient}</span>
-                          </h4>
-                          <h5 className="text-xs text-slate-400 mt-0.5">
-                            From: {msg.sender}
-                          </h5>
-                        </div>
-                        {/* Dot Indicator matching tree light */}
-                        <div 
-                          className="w-4 h-4 rounded-full shadow-inner flex-shrink-0 mt-1" 
-                          style={{ backgroundColor: msg.color, boxShadow: `0 0 10px ${msg.color}80` }} 
-                        />
-                      </div>
-                      <p className="text-slate-300 text-sm leading-relaxed flex-grow">
-                        "{msg.message}"
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
 
+                          {/* Light Hover/Tap Tooltip */}
+                          <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-56 sm:w-64 glass-panel bg-slate-900/90 p-3.5 rounded-2xl pointer-events-none transition-all duration-200 origin-bottom z-50 ${isHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}>
+                            <div className="flex justify-between items-center gap-2 mb-1.5 border-b border-white/10 pb-1.5">
+                              <span className="font-semibold text-sm text-emerald-300 truncate">To: {msg.recipient}</span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-slate-200 border border-white/10 flex-shrink-0">
+                                {msg.department}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-100 leading-relaxed mb-2 line-clamp-3">
+                              "{msg.message}"
+                            </p>
+                            <div className="text-[11px] text-slate-400 text-right font-medium truncate">
+                              From: {msg.sender}
+                            </div>
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-slate-800" />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Search, Department Filters & Scrollable Cards */}
+              <div className="lg:col-span-7 flex flex-col h-[680px] lg:h-full">
+                
+                {/* Search & Filters Controls */}
+                <div className="glass-panel rounded-3xl p-5 md:p-6 mb-4 flex-shrink-0 space-y-4">
+                  <div className="relative">
+                    <IconSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                    <input
+                      type="text"
+                      placeholder="搜尋收件人、寄件人、部門或感謝內容..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full glass-input rounded-xl pl-12 pr-10 py-3 transition-all text-sm placeholder:text-slate-400"
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                        aria-label="清除搜尋"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+                      >
+                        <IconX size={16} />
+                      </button>
+                    )}
+                  </div>
+                  
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveDept('All')}
+                      className={`px-4 py-2 rounded-full text-xs md:text-sm font-medium transition-all ${
+                        activeDept === 'All'
+                          ? 'bg-white text-slate-900 shadow-[0_0_15px_rgba(255,255,255,0.4)]'
+                          : 'bg-white/5 hover:bg-white/15 text-slate-200 border border-white/10'
+                      }`}
+                    >
+                      All 總覽 ({messages.length})
+                    </button>
+                    {DEPARTMENTS.map(dept => {
+                      const count = messages.filter(m => m.department === dept).length;
+                      return (
+                        <button
+                          key={dept}
+                          type="button"
+                          onClick={() => setActiveDept(dept)}
+                          className={`px-4 py-2 rounded-full text-xs md:text-sm font-medium transition-all ${
+                            activeDept === dept
+                              ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] border border-emerald-400'
+                              : 'bg-white/5 hover:bg-white/15 text-slate-200 border border-white/10'
+                          }`}
+                        >
+                          {dept} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Scrollable Message List */}
+                <div className="flex-grow overflow-y-auto custom-scrollbar pr-1 md:pr-2 pb-6">
+                  {filteredMessages.length === 0 ? (
+                    <div className="glass-panel rounded-3xl p-12 text-center flex flex-col items-center justify-center mt-2">
+                      <IconMessageSquare size={48} className="text-slate-500 mb-4" />
+                      <p className="text-lg text-slate-200 font-medium">找不到符合條件的感謝留言</p>
+                      <p className="text-sm text-slate-400 mt-2">請嘗試更換搜尋關鍵字或切換其他部門分類</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {filteredMessages.map((msg, idx) => (
+                        <div
+                          key={msg.id}
+                          className="glass-panel p-5 rounded-2xl transition-all duration-300 hover:-translate-y-1 hover:border-emerald-400/40 hover:shadow-[0_8px_25px_rgba(16,185,129,0.12)] animate-pop-in flex flex-col cursor-pointer"
+                          style={{ animationDelay: `${(idx % 10) * 0.04}s` }}
+                          onMouseEnter={() => setHoveredMsgId(msg.id)}
+                          onMouseLeave={() => setHoveredMsgId(null)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setHoveredMsgId(hoveredMsgId === msg.id ? null : msg.id);
+                          }}
+                        >
+                          <div className="flex justify-between items-start mb-3 gap-2">
+                            <div>
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <span className="px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-white/10 text-slate-200 border border-white/10">
+                                  {msg.department}
+                                </span>
+                                <span className="text-xs text-slate-400">{msg.date}</span>
+                              </div>
+                              <h4 className="font-semibold text-slate-100 text-sm">
+                                To: <span className="text-emerald-400">{msg.recipient}</span>
+                              </h4>
+                              <h5 className="text-xs text-slate-400 mt-0.5">
+                                From: {msg.sender}
+                              </h5>
+                            </div>
+                            {/* Dot Indicator matching tree light */}
+                            <div
+                              className="w-3.5 h-3.5 rounded-full flex-shrink-0 mt-1"
+                              style={{ backgroundColor: msg.color, boxShadow: `0 0 10px ${msg.color}` }}
+                            />
+                          </div>
+                          <p className="text-slate-200 text-sm leading-relaxed flex-grow">
+                            「{msg.message}」
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
